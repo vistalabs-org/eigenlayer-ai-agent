@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+%environment
+    export LC_ALL=C
+    export PATH="/root/.local/bin:$PATH"
+
+%post
+    echo "Updating package list and installing dependencies..."
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        && rm -rf /var/lib/apt/lists/*
+
+    echo "Installing Poetry..."
+    curl -sSL https://install.python-poetry.org | python3 -
+
+    export PATH="/root/.local/bin:$PATH"
+
+    echo "Verifying Poetry installation..."
+    poetry --version
+    poetry config virtualenvs.in-project true
+
+%runscript
+    exec "$@"

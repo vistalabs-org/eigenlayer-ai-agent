@@ -1,0 +1,8 @@
+{
+  "provider": "http://localhost:8545",
+  "oracle_address": "0x...",
+  "registry_address": "0x...",
+  "agent_address": "0x...",
+  "backend": "openrouter",
+  "model": "openai/gpt-4-turbo"
+}
