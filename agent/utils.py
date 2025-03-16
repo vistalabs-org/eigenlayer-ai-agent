@@ -10,42 +10,85 @@ import pkg_resources
 logger = logging.getLogger(__name__)
 
 def get_abi_path(filename: str) -> Path:
-    """Get the path to the ABI file"""
-    # Try to load from the package resources
-    try:
-        resource_path = pkg_resources.resource_filename("agent", f"abi/{filename}")
-        if os.path.exists(resource_path):
-            return Path(resource_path)
-    except Exception:
-        pass
-    
-    # Try to load from the current directory
-    current_dir = Path(__file__).parent.absolute()
-    abi_path = current_dir / 'abi' / filename
-    
+    """Get the path to an ABI file, searching in multiple locations"""
+    # First check in the 'abis' directory in the current folder
+    abi_path = Path.cwd() / 'abis' / filename
     if abi_path.exists():
         return abi_path
+        
+    # Try the parent folder
+    parent_abi_path = Path.cwd().parent / 'abis' / filename
+    if parent_abi_path.exists():
+        return parent_abi_path
+        
+    # Try in a specific 'contracts/out' directory for Forge artifacts
+    forge_artifacts = Path.cwd().parent / 'contracts' / 'out' / filename
+    if forge_artifacts.exists():
+        return forge_artifacts
+        
+    # If not found, check in common locations
+    common_locations = [
+        Path.cwd() / 'abi',
+        Path.cwd() / 'artifacts',
+        Path.cwd().parent / 'abi',
+        Path.cwd().parent / 'artifacts',
+    ]
     
-    # Try to load from the user's home directory
-    home_path = Path.home() / '.eigenlayer' / 'abi' / filename
+    for location in common_locations:
+        potential_abi = location / filename
+        if potential_abi.exists():
+            return potential_abi
     
-    if home_path.exists():
-        return home_path
-    
-    # If we can't find the ABI, raise an error
+    # If we still haven't found it, raise an error
     raise FileNotFoundError(f"Could not find ABI file: {filename}")
 
-def load_abi(filename: str) -> Dict[str, Any]:
+def load_abi(filename: str) -> Any:
     """Load ABI from a JSON file"""
-    abi_path = get_abi_path(filename)
-    
-    with open(abi_path, 'r') as f:
-        abi_json = json.load(f)
-    
-    # Handle different ABI file formats
-    if isinstance(abi_json, dict) and 'abi' in abi_json:
-        return abi_json['abi']
-    return abi_json
+    try:
+        abi_path = get_abi_path(filename)
+        
+        with open(abi_path, 'r') as f:
+            abi_json = json.load(f)
+        
+        # Handle different ABI file formats
+        if isinstance(abi_json, dict) and 'abi' in abi_json:
+            return abi_json['abi']
+        return abi_json
+    except FileNotFoundError:
+        print(f"Warning: ABI file {filename} not found in standard locations.")
+        print("Checking in abis directory relative to current working directory...")
+        
+        # Emergency fallback - directly check the abis directory
+        direct_path = Path('abis') / filename
+        if direct_path.exists():
+            print(f"Found ABI file directly in {direct_path}")
+            with open(direct_path, 'r') as f:
+                abi_json = json.load(f)
+            return abi_json
+        
+        # Special case for AIOracleServiceManager - load the ABI directly
+        if filename == 'AIOracleServiceManager.json':
+            print("Using hardcoded minimal ABI for AIOracleServiceManager")
+            minimal_abi = [
+                {
+                    "inputs": [],
+                    "name": "latestTaskNum",
+                    "outputs": [{"internalType": "uint32", "name": "", "type": "uint32"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [{"internalType": "string", "name": "name", "type": "string"}],
+                    "name": "createNewTask", 
+                    "outputs": [{"components":[{"internalType":"string","name":"name","type":"string"},{"internalType":"uint32","name":"taskCreatedBlock","type":"uint32"}],"internalType":"struct IAIOracleServiceManager.Task","name":"","type":"tuple"}],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                }
+            ]
+            return minimal_abi
+        
+        # Otherwise raise the original error
+        raise
 
 def sign_message(web3: Web3, message: str, private_key: str) -> bytes:
     """Sign a message using the given private key"""
@@ -54,53 +97,70 @@ def sign_message(web3: Web3, message: str, private_key: str) -> bytes:
     return signed_message.signature
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
-    """Load configuration from a JSON file"""
-    if config_path is None:
-        # Look for config in standard locations
-        locations = [
-            Path.cwd() / "eigenlayer_config.json",
-            Path.home() / ".eigenlayer" / "config.json"
-        ]
-        
-        for loc in locations:
-            if loc.exists():
-                config_path = loc
-                break
-        else:
-            return {}  # Return empty config if no file found
-    else:
+    """Load configuration from a file or default location"""
+    if config_path:
         config_path = Path(config_path)
-    
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"Failed to load config from {config_path}: {e}")
-        return {}
-
-def setup_web3(provider_url: Optional[str] = None) -> Web3:
-    """Setup Web3 connection"""
-    if provider_url is None:
-        # Try to get provider URL from environment variable
-        provider_url = os.environ.get("WEB3_PROVIDER_URI")
-        
-        if provider_url is None:
-            # Use a default provider if none is specified
-            provider_url = "http://localhost:8545"
-    
-    if provider_url.startswith("http"):
-        return Web3(Web3.HTTPProvider(provider_url))
-    elif provider_url.startswith("ws"):
-        return Web3(Web3.WebsocketProvider(provider_url))
     else:
-        raise ValueError(f"Unsupported provider URL: {provider_url}")
+        config_path = Path.cwd() / "eigenlayer_config.json"
+    
+    if not config_path.exists():
+        return {}
+    
+    with open(config_path, 'r') as f:
+        return json.load(f)
+
+def setup_web3(provider_uri: str) -> Web3:
+    """Set up Web3 connection with proxy support"""
+    # Add proxy support
+    request_kwargs = {'timeout': 30}
+    
+    if provider_uri == "http://localhost:8545":
+        web3 = Web3(Web3.HTTPProvider(provider_uri, request_kwargs=request_kwargs))
+    else:
+        
+        # Handle proxy settings
+        http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+        https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+        
+        if http_proxy or https_proxy:
+            proxies = {}
+            if https_proxy:
+                proxies['https'] = https_proxy
+            if http_proxy:
+                proxies['http'] = http_proxy
+            
+            if proxies:
+                print(f"Using proxy settings: {proxies}")
+                request_kwargs['proxies'] = proxies
+        
+        # Create Web3 instance with proxy configuration
+        web3 = Web3(Web3.HTTPProvider(provider_uri, request_kwargs=request_kwargs))
+    
+    # Verify connection
+    try:
+        connected = web3.is_connected()
+        if connected:
+            print(f"Successfully connected to {provider_uri}")
+            print(f"Chain ID: {web3.eth.chain_id}")
+        else:
+            print(f"Warning: Could not connect to {provider_uri}")
+    except Exception as e:
+        print(f"Error connecting to provider: {e}")
+    
+    return web3
 
 def create_directory_structure():
-    """Create the necessary directory structure"""
-    # Create the ABI directory
-    abi_dir = Path.home() / '.eigenlayer' / 'abi'
-    abi_dir.mkdir(parents=True, exist_ok=True)
+    """Create necessary directories for the agent"""
+    # Create data directory
+    data_dir = Path.cwd() / "data"
+    if not data_dir.exists():
+        data_dir.mkdir()
     
-    # Create the config directory
-    config_dir = Path.home() / '.eigenlayer'
-    config_dir.mkdir(parents=True, exist_ok=True)
+    # Create subdirectories
+    tasks_dir = data_dir / "tasks"
+    if not tasks_dir.exists():
+        tasks_dir.mkdir()
+    
+    responses_dir = data_dir / "responses"
+    if not responses_dir.exists():
+        responses_dir.mkdir()

@@ -11,14 +11,10 @@ setup(
         "click>=8.0.0",
         "pydantic>=2.0.0",
     ],
-    extras_require={
-        "openai": ["openai>=1.0.0"],
-        "anthropic": ["anthropic>=0.5.0"],
-        "all": ["openai>=1.0.0", "anthropic>=0.5.0"],
-    },
     entry_points={
         "console_scripts": [
-            "eigenlayer-agent=eigenlayer_agent.cli:main",
+            "eigenlayer-agent=agent.cli:main",
+            "prediction-market-bridge=agent.__main__:main",
         ],
     },
     python_requires=">=3.10",

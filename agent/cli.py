@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 from web3 import Web3
 
 from .utils import setup_web3, load_config, create_directory_structure
-from .manager import AgentManager
+from .manager import AgentManager, AgentStatus
 from .llm import OpenRouterBackend
+from .__main__ import PredictionMarketBridge
 
 # Configure logging
 logging.basicConfig(
@@ -272,6 +273,49 @@ def list_openrouter_models(api_key):
             click.echo(f"- {model}")
     except Exception as e:
         raise click.ClickException(f"Error fetching models: {e}")
+
+@cli.command()
+@click.option('--config', '-c', type=click.Path(exists=True), help='Path to config file')
+@click.option('--provider', '-p', envvar='WEB3_PROVIDER_URI', help='Web3 provider URL')
+@click.option('--private-key', envvar='PRIVATE_KEY', help='Private key for signing transactions')
+@click.option('--oracle-address', envvar='ORACLE_ADDRESS', help='Oracle contract address')
+@click.option('--market-address', envvar='MARKET_ADDRESS', help='PredictionMarketHook contract address')
+@click.option('--interval', '-i', default=30, envvar='POLLING_INTERVAL', help='Polling interval in seconds')
+@click.option('--run-once', is_flag=True, help='Run once and exit')
+def run_bridge(config, provider, private_key, oracle_address, market_address, interval, run_once):
+    """Run the Prediction Market Bridge"""
+    # Load configuration
+    cfg = load_config(config)
+    
+    # Override config with command line arguments
+    if provider:
+        cfg['provider'] = provider
+    if oracle_address:
+        cfg['oracle_address'] = oracle_address
+    if market_address:
+        cfg['market_address'] = market_address
+    if private_key:
+        cfg['private_key'] = private_key
+    
+    # Check for required configuration
+    if 'oracle_address' not in cfg:
+        raise click.ClickException("Oracle address is required. Set it via --oracle-address or ORACLE_ADDRESS environment variable.")
+    
+    if 'provider' not in cfg:
+        raise click.ClickException("Web3 provider URI is required. Set it via --provider or WEB3_PROVIDER_URI environment variable.")
+    
+    # Create and run bridge
+    try:
+        bridge = PredictionMarketBridge(
+            config_path=config, 
+            oracle_address=cfg.get('oracle_address'),
+            market_address=cfg.get('market_address')
+        )
+        
+        click.echo(f"Starting Prediction Market Bridge with interval {interval} seconds")
+        bridge.run(interval=interval, run_once=run_once)
+    except Exception as e:
+        raise click.ClickException(f"Failed to run bridge: {e}")
 
 @cli.command()
 @click.option('--api-key', envvar='OPENROUTER_API_KEY', help='OpenRouter API key')

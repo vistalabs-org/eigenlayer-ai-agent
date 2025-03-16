@@ -1,8 +1,11 @@
 {
   "provider": "http://localhost:8545",
-  "oracle_address": "0x...",
-  "registry_address": "0x...",
-  "agent_address": "0x...",
+  "oracle_address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  "registry_address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+  "agent_address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
   "backend": "openrouter",
-  "model": "openai/gpt-4-turbo"
+  "model": "openai/gpt-4-turbo",
+  "private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "api_key": "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",
+  "market_address": "0x0000000000000000000000000000000000000000"
 }
