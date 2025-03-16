@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from web3 import Web3
 from eth_account.messages import encode_defunct
-import pkg_resources
+# Removing pkg_resources import as it's deprecated
+# Use importlib.metadata instead if needed
 
 logger = logging.getLogger(__name__)
 
