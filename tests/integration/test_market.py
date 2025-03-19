@@ -10,8 +10,9 @@ import json
 import logging
 import sys
 import time
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,20 +23,21 @@ current_dir = Path(__file__).parent
 parent_dir = current_dir.parent.parent
 sys.path.append(str(parent_dir))
 
+from agent.__main__ import PredictionMarketBridge
+from agent.oracle import TaskStatus
+
 # Import utility functions and modules
 from .test_utils import (
-    load_config,
+    create_oracle_task,
     get_default_private_key,
-    get_web3_instance,
     get_oracle_instance,
-    create_oracle_task
+    get_web3_instance,
+    load_config,
 )
-from agent.oracle import TaskStatus
-from agent.__main__ import PredictionMarketBridge
 
 # Configuration constants
 ANVIL_URL = "http://localhost:8545"
-CONFIG_PATH = parent_dir / "eigenlayer_config.json"
+CONFIG_PATH = parent_dir / "config.json"
 
 # Hardcoded contract addresses (from existing deployment)
 oracle_address = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
@@ -49,12 +51,12 @@ def check_blockchain_connection():
     if not web3:
         logger.error("Could not connect to blockchain")
         return False
-        
+
     # Get basic blockchain info
     chain_id = web3.eth.chain_id
     block_number = web3.eth.block_number
     accounts = web3.eth.accounts
-        
+
     logger.info(f"Successfully connected to blockchain:")
     logger.info(f"  Chain ID: {chain_id}")
     logger.info(f"  Current block: {block_number}")
@@ -67,19 +69,21 @@ def update_config():
     try:
         # Get existing config or create new one
         config = load_config(CONFIG_PATH) if CONFIG_PATH.exists() else {}
-        
+
         # Update with contract addresses
-        config.update({
-            "provider": ANVIL_URL,
-            "oracle_address": oracle_address,
-            "registry_address": registry_address,
-            "market_address": hook_address,
-        })
-        
+        config.update(
+            {
+                "provider": ANVIL_URL,
+                "oracle_address": oracle_address,
+                "registry_address": registry_address,
+                "market_address": hook_address,
+            }
+        )
+
         # Write config
-        with open(CONFIG_PATH, 'w') as f:
+        with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=2)
-        
+
         logger.info("Configuration updated")
         return True
     except Exception as e:
@@ -93,20 +97,22 @@ def create_test_task():
     web3 = get_web3_instance(ANVIL_URL)
     if not web3:
         return None
-    
+
     private_key = get_default_private_key()
     oracle = get_oracle_instance(web3, oracle_address, private_key)
     if not oracle:
         return None
-    
+
     # Create task
-    task_data = "Prediction market question: Will ETH reach $5000 by end of 2025? YES/NO"
+    task_data = (
+        "Prediction market question: Will ETH reach $5000 by end of 2025? YES/NO"
+    )
     tx_hash, task_index = create_oracle_task(oracle, task_data)
-    
+
     if not tx_hash or task_index is None:
         logger.error("Task creation failed")
         return None
-    
+
     logger.info(f"Successfully created task with index: {task_index}")
     return task_index
 
@@ -118,17 +124,18 @@ def run_bridge(run_once=True):
         bridge = PredictionMarketBridge(
             config_path=str(CONFIG_PATH),
             oracle_address=oracle_address,
-            market_address=hook_address
+            market_address=hook_address,
         )
-        
+
         # Run the bridge
         logger.info("Running prediction market bridge...")
         bridge.run(run_once=run_once)
-        
+
         return True
     except Exception as e:
         logger.error(f"Error running bridge: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -162,16 +169,16 @@ def test_e2e_integration():
     """Run the entire end-to-end test sequence"""
     # Step 1: Check blockchain connection
     test_blockchain_connection()
-    
+
     # Step 2: Update configuration
     test_config_update()
-    
+
     # Step 3: Create a test task
     test_task_creation()
-    
+
     # Step 4: Run the bridge
     test_bridge_run()
-    
+
     # We've successfully completed all the individual test steps
     logger.info("End-to-end integration test completed successfully")
     assert True, "End-to-end test completed"
@@ -184,7 +191,7 @@ if __name__ == "__main__":
     test_task_creation()
     test_bridge_run()
     test_e2e_integration()
-    
+
     # Report success
     print("All tests completed successfully")
     sys.exit(0)

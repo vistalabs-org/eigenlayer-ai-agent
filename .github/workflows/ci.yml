@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Install Foundry (Anvil)
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          foundryup
+
+      - name: Start Anvil
+        run: |
+          anvil &
+          sleep 5  # Wait for Anvil to start
+
+      - name: Run linters
+        run: |
+          poetry run black --check .
+          poetry run isort --check-only .
+          poetry run flake8 .
+
+      - name: Run tests
+        env:
+          WEB3_PROVIDER_URI: http://localhost:8545
+        run: poetry run pytest

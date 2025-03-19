@@ -19,6 +19,7 @@ python-dotenv = ">=0.15.0"
 click = ">=8.0.0"
 pydantic = ">=2.0.0"
 setuptools = ">=42.0.0"
+loguru = "^0.7.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
@@ -27,7 +28,7 @@ isort = "^5.12.0"
 flake8 = "^6.0.0"
 
 [tool.poetry.scripts]
-eigenlayer-agent = "agent.cli:main"
+agent = "agent.__main__:main"
 
 [tool.black]
 line-length = 88
