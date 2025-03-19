@@ -9,10 +9,15 @@ This version assumes:
 import json
 import logging
 import sys
-import time
 from pathlib import Path
-
-import pytest
+from agent.__main__ import PredictionMarketBridge
+from .test_utils import (
+    create_oracle_task,
+    get_default_private_key,
+    get_oracle_instance,
+    get_web3_instance,
+    load_config,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,18 +27,6 @@ logger = logging.getLogger(__name__)
 current_dir = Path(__file__).parent
 parent_dir = current_dir.parent.parent
 sys.path.append(str(parent_dir))
-
-from agent.__main__ import PredictionMarketBridge
-from agent.oracle import TaskStatus
-
-# Import utility functions and modules
-from .test_utils import (
-    create_oracle_task,
-    get_default_private_key,
-    get_oracle_instance,
-    get_web3_instance,
-    load_config,
-)
 
 # Configuration constants
 ANVIL_URL = "http://localhost:8545"
@@ -57,7 +50,7 @@ def check_blockchain_connection():
     block_number = web3.eth.block_number
     accounts = web3.eth.accounts
 
-    logger.info(f"Successfully connected to blockchain:")
+    logger.info("Successfully connected to blockchain:")
     logger.info(f"  Chain ID: {chain_id}")
     logger.info(f"  Current block: {block_number}")
     logger.info(f"  Available accounts: {len(accounts)}")

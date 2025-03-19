@@ -5,22 +5,18 @@ This script is used after setting up the mock environment with mock_testing.py.
 """
 
 import sys
-from pathlib import Path
-
 import pytest
 
 # Import utility functions
 from .test_utils import (
     AGENT_IMPORTS_SUCCESS,
     get_default_private_key,
-    get_oracle_instance,
     get_web3_instance,
     load_config,
 )
 
 # Try to import agent modules
 try:
-    from agent.agent import Agent
     from agent.oracle import Oracle
     from agent.registry import Registry
 except ImportError:
@@ -78,7 +74,7 @@ class TestContractTester:
         # Set up Web3 connection
         self.web3 = get_web3_instance(config=self.config)
         if not self.web3:
-            pytest.skip(f"Could not connect to blockchain provider")
+            pytest.skip("Could not connect to blockchain provider")
             return
 
         # Set up account
@@ -93,10 +89,6 @@ class TestContractTester:
         try:
             self.oracle = Oracle(
                 self.web3, self.config["oracle_address"], self.private_key
-            )
-
-            self.agent = Agent(
-                self.web3, self.config["agent_address"], self.private_key
             )
 
             self.registry = Registry(
@@ -176,7 +168,6 @@ class TestContractTester:
 
         # Just verify that the clients exist and seem to be connected
         assert self.oracle is not None, "Oracle client should be initialized"
-        assert self.agent is not None, "Agent client should be initialized"
         assert self.registry is not None, "Registry client should be initialized"
 
         print("All agent clients successfully initialized")

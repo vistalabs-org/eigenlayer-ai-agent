@@ -53,7 +53,8 @@ class PredictionMarketBridge:
         self.private_key = self.config.get("private_key", None)
         if not self.private_key:
             logger.warning(
-                "No private key found in config. Only read operations will be available."
+                "No private key found in config. "
+                "Only read operations will be available."
             )
 
         # Set up account
@@ -79,7 +80,8 @@ class PredictionMarketBridge:
         registry_addr = self.config.get("registry_address")
         if not registry_addr:
             logger.warning(
-                "Registry address not provided in config. Some features will be limited."
+                "Registry address not provided in config. "
+                "Some features will be limited."
             )
 
         # Use agent address or account address
@@ -305,11 +307,13 @@ class PredictionMarketBridge:
 
         prompt = f"""
         You are evaluating a prediction market question.
-        Your task is to respond with either YES or NO, followed by a brief explanation of your reasoning.
-        
+        Your task is to respond with either YES or NO,
+        followed by a brief explanation of your reasoning.
+
         Question: {task_content}
-        
-        Response format: Start with YES or NO (capitalized), followed by your explanation.
+
+        Response format: Start with YES or NO (capitalized),
+        followed by your explanation.
         """
 
         # Call AI agent if available or return mock response for testing
@@ -494,7 +498,7 @@ def parse_args():
 
 def main():
     # Set up logging first thing
-    log_file = setup_logging("DEBUG")  # Use DEBUG level for maximum verbosity
+    setup_logging("DEBUG")  # Use DEBUG level for maximum verbosity
 
     try:
         # Parse command line arguments

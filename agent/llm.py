@@ -3,7 +3,10 @@ LLM module for EigenLayer AI Agent
 Provides interfaces to AI models and search functionality
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
+import json
+
+import requests
 
 
 class OpenRouterBackend:
@@ -33,14 +36,6 @@ class OpenRouterBackend:
             - mistral/mistral-large
             - meta-llama/llama-3-70b-instruct
         """
-        try:
-            import json
-
-            import requests
-        except ImportError:
-            raise ImportError(
-                "Requests package is not installed. Install using 'pip install requests'"
-            )
 
         self.api_key = api_key
         self.model = model
@@ -55,9 +50,6 @@ class OpenRouterBackend:
 
     def generate_response(self, query: str) -> str:
         """Generate a response using OpenRouter API"""
-        import json
-
-        import requests
 
         payload = {
             "model": self.model,
@@ -97,12 +89,9 @@ class OpenRouterBackend:
         """
         if not self.tavily_api_key:
             raise Exception(
-                "Tavily API key is required for web search. Please provide a tavily_api_key when initializing the backend."
+                "Tavily API key is required for web search. "
+                "Please provide a tavily_api_key when initializing the backend."
             )
-
-        import json
-
-        import requests
 
         url = "https://api.tavily.com/search"
         headers = {
@@ -164,21 +153,20 @@ class OpenRouterBackend:
                 context += f"   {result['content'][:200]}...\n"
                 context += f"   Source: {result['url']}\n\n"
 
-            # Generate response with context
-            import json
-
-            import requests
-
             payload = {
                 "model": self.model,
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful AI assistant. Answer based on the provided web search results when relevant.",
+                        "content": "You are a helpful AI assistant. \
+                            Answer based on the provided web search \
+                                results when relevant.",
                     },
                     {
                         "role": "user",
-                        "content": f"Here is some relevant information from the web:\n\n{context}\n\nBased on this information, please answer: {query}",
+                        "content": f"Here is some relevant information \
+                            from the web:\n\n{context}\n\nBased on this \
+                                information, please answer: {query}",
                     },
                 ],
             }
@@ -208,9 +196,6 @@ class OpenRouterBackend:
 
     def list_available_models(self) -> List[str]:
         """Get a list of available models from OpenRouter"""
-        import json
-
-        import requests
 
         response = requests.get(
             "https://openrouter.ai/api/v1/models", headers=self.request_headers

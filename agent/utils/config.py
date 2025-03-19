@@ -32,7 +32,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
-        logger.debug(f"Configuration loaded successfully")
+        logger.debug("Configuration loaded successfully")
         return config
     except Exception as e:
         logger.exception(f"Error loading configuration: {e}")

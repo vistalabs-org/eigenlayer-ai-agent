@@ -4,29 +4,9 @@ Common utility functions for integration tests.
 """
 
 import json
-import logging
-import os
-import sys
 from pathlib import Path
-
-# Try to import Web3 and related modules
-try:
-    import web3
-    from web3 import Web3
-except ImportError:
-    print("Error: web3 package is required. Please install it with: pip install web3")
-    sys.exit(1)
-
-# Try to import agent modules
-try:
-    from agent.oracle import Oracle
-    from agent.utils import load_abi, setup_web3
-
-    AGENT_IMPORTS_SUCCESS = True
-except ImportError as e:
-    print(f"Warning: Failed to import agent modules: {e}")
-    print("Make sure you're running this from the eigenlayer-ai-agent directory.")
-    AGENT_IMPORTS_SUCCESS = False
+from agent.oracle import Oracle
+from agent.utils import setup_web3
 
 
 def load_config(config_path=None):
@@ -109,7 +89,8 @@ def get_oracle_instance(web3, oracle_address=None, private_key=None, config=None
 
 def create_oracle_task(
     oracle,
-    task_data="Prediction market question: Will ETH reach $5000 by the end of 2025? Please respond with YES or NO.",
+    task_data="Prediction market question: Will ETH reach $5000 by the end of 2025?"
+        " Please respond with YES or NO.",
 ):
     """
     Create a task in the Oracle contract and return the transaction hash and task index.
@@ -128,7 +109,7 @@ def create_oracle_task(
         if receipt["status"] == 1:
             return tx_hash, task_index
         else:
-            print(f"Task creation failed")
+            print("Task creation failed")
             return None, None
     except Exception as e:
         print(f"Error creating task: {e}")

@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import time
 from enum import IntEnum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict
 
 from web3 import Web3
 
@@ -39,7 +38,7 @@ class AgentManager:
             web3: Web3 instance
             oracle_address: AIOracleServiceManager contract address
             registry_address: AIAgentRegistry contract address
-            agent_address: AIAgent contract address (the address used for responding to tasks)
+            agent_address: AIAgent contract address
             private_key: Private key for transactions
             ai_backend: OpenRouterBackend instance for generating responses
         """
@@ -80,10 +79,10 @@ class AgentManager:
                     tx_hash = self.registry.register_agent(self.agent_address)
                     receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
                     if receipt.status == 1:
-                        logger.info(f"Agent registration successful")
+                        logger.info("Agent registration successful")
                         self.is_registered = True
                     else:
-                        logger.error(f"Agent registration failed")
+                        logger.error("Agent registration failed")
                 else:
                     logger.warning("Registry does not support agent registration")
             except Exception as e:
@@ -100,9 +99,6 @@ class AgentManager:
 
         # Ensure agent is set up
         await self.setup()
-
-        # Last processed task
-        last_processed_task = -1
 
         # Cache for processed tasks
         processed_tasks = set()
@@ -177,12 +173,6 @@ class AgentManager:
                 processed_tasks.add(task_index)
                 return
 
-            # # Check if task is related to prediction markets
-            # if not self.is_prediction_market_task(task):
-            #     logger.info(f"Task {task_index} is not related to prediction markets, skipping")
-            #     processed_tasks.add(task_index)
-            #     return
-
             # Generate AI response
             query = task.get("name", "")
             logger.info(f"Generating response for task: {query}")
@@ -218,11 +208,13 @@ class AgentManager:
 
         prompt = f"""
         You are evaluating a prediction market question.
-        Your task is to respond with either YES or NO, followed by a brief explanation of your reasoning.
-        
+        Your task is to respond with either YES or NO,
+        followed by a brief explanation of your reasoning.
+
         Question: {task_content}
-        
-        Response format: Start with YES or NO (capitalized), followed by your explanation.
+
+        Response format: Start with YES or NO (capitalized),
+        followed by your explanation.
         """
 
         # Call AI agent if available or return mock response for testing
