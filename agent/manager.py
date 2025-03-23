@@ -4,6 +4,7 @@ from enum import IntEnum
 from typing import Any, Dict
 
 from web3 import Web3
+from eth_account.messages import encode_defunct
 
 from .llm import OpenRouterBackend
 from .oracle import Oracle, TaskStatus
@@ -260,18 +261,25 @@ class AgentManager:
         task_data = task.get("name", "")
         message = f"Hello, {task_data}"
         signature_hash = self.web3.keccak(text=message)
-        signature = self.web3.eth.account.sign_message(
-            Web3.to_bytes(hexstr=signature_hash.hex()), private_key=self.private_key
-        ).signature
-
-        # Submit to blockchain
+        
+        # Use encode_defunct to create a proper signable message
+        signable_message = encode_defunct(hexstr=signature_hash.hex())
+        signature_object = self.web3.eth.account.sign_message(
+            signable_message,
+            private_key=self.private_key
+        )
+        
+        # Extract ONLY the signature bytes from the SignedMessage object
+        signature_bytes = signature_object.signature  # This is what we need!
+        
+        # Submit to blockchain with the correct signature format
         try:
             nonce = self.web3.eth.get_transaction_count(self.account.address)
             gas_price = self.web3.eth.gas_price
 
-            # Build transaction
+            # Build transaction with corrected signature parameter
             tx = self.oracle.contract.functions.respondToTask(
-                task_struct, task_index, signature
+                task_struct, task_index, signature_bytes  # Pass just the signature bytes
             ).build_transaction(
                 {
                     "from": self.account.address,
@@ -281,9 +289,9 @@ class AgentManager:
                 }
             )
 
-            # Sign and send
+            # Sign and send with the corrected attribute name
             signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)

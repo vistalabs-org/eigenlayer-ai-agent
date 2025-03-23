@@ -17,12 +17,12 @@ from loguru import logger
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from .llm import OpenRouterBackend
-from .manager import AgentManager
-from .oracle import Oracle, TaskStatus
-from .utils.config import load_config
-from .utils.logger import setup_logging
-from .utils.web3 import setup_web3
+from agent.llm import OpenRouterBackend
+from agent.manager import AgentManager
+from agent.oracle import Oracle, TaskStatus
+from agent.utils.config import load_config
+from agent.utils.logger import setup_logging
+from agent.utils.web3 import setup_web3
 
 
 class PredictionMarketBridge:
@@ -95,7 +95,7 @@ class PredictionMarketBridge:
             )
 
         # Set up AI agent using OpenRouterBackend
-        model = self.config.get("model", "openai/gpt-4-turbo")
+        model = self.config.get("model", "google/gemma-3-27b-it:free")
         api_key = self.config.get("api_key", None)
 
         if not api_key:
@@ -281,13 +281,8 @@ class PredictionMarketBridge:
         Returns:
             True if the task is for a prediction market
         """
-        # Check task name/description for prediction market keywords
-        task_name = task.get("name", "").lower()
-        return (
-            "prediction market" in task_name
-            or "market question" in task_name
-            or "please respond with yes or no" in task_name
-        )
+        # Process all tasks
+        return True
 
     async def get_ai_response_async(self, task: Dict[str, Any]) -> str:
         """

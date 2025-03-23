@@ -15,7 +15,7 @@ class OpenRouterBackend:
     def __init__(
         self,
         api_key: str,
-        model: str = "openai/gpt-4-turbo",
+        model: str = "google/gemma-3-27b-it:free",
         tavily_api_key: Optional[str] = None,
         **kwargs,
     ):
@@ -72,6 +72,11 @@ class OpenRouterBackend:
             )
 
         data = response.json()
+        print(f"OpenRouter response: {data}")
+        
+        if "error" in data:
+            raise Exception(f"OpenRouter API error: {data['error']['message']}")
+        
         return data["choices"][0]["message"]["content"]
 
     def search_web(self, query: str) -> List[Dict[str, str]]:
