@@ -18,7 +18,7 @@ Create a configuration file `config.json` with the following structure:
 
 ```json
 {
-  "provider": "http://localhost:8545",
+  "rpc_url": "http://localhost:8545",
   "oracle_address": "0x...",
   "registry_address": "0x...",
   "agent_address": "0x...",

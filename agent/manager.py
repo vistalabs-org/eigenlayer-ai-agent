@@ -1,16 +1,15 @@
 import asyncio
-import logging
 from enum import IntEnum
 from typing import Any, Dict
 
+from loguru import logger
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
 from .llm import OpenRouterBackend
 from .oracle import Oracle, TaskStatus
 from .registry import Registry
-
-logger = logging.getLogger(__name__)
+from .interface import AgentInterface
 
 
 # Define agent status enum (moved from agent.py)
@@ -70,6 +69,9 @@ class AgentManager:
         except Exception as e:
             logger.warning(f"Could not check agent registration: {e}")
             self.is_registered = False
+
+        # Add this for the AIAgent client
+        self.agent = AgentInterface(web3, agent_address, private_key)
 
     async def setup(self):
         """Setup the agent - register if needed"""
@@ -241,8 +243,8 @@ class AgentManager:
 
     def submit_response(self, task_index: int, task: Dict[str, Any], response: str):
         """
-        Submit response to the Oracle contract
-
+        Submit response via AIAgent contract
+        
         Args:
             task_index: Task index
             task: Task data
@@ -251,56 +253,37 @@ class AgentManager:
         if not self.account:
             raise ValueError("Cannot submit response without a private key")
 
-        # Create task struct to pass to respondToTask
-        task_struct = {
-            "name": task.get("name", ""),
-            "taskCreatedBlock": task.get("taskCreatedBlock", 0),
-        }
+        # Sign the response with minimal data
+        message = f"Task{task_index}"  # Very short message - same as in contract
 
-        # Sign the response
-        task_data = task.get("name", "")
-        message = f"Hello, {task_data}"
+        logger.info(f"Signing message: {message}")
         signature_hash = self.web3.keccak(text=message)
         
-        # Use encode_defunct to create a proper signable message
         signable_message = encode_defunct(hexstr=signature_hash.hex())
         signature_object = self.web3.eth.account.sign_message(
             signable_message,
             private_key=self.private_key
         )
         
-        # Extract ONLY the signature bytes from the SignedMessage object
-        signature_bytes = signature_object.signature  # This is what we need!
+        # Extract signature bytes
+        signature_bytes = signature_object.signature
         
-        # Submit to blockchain with the correct signature format
+        # Submit to blockchain via the AIAgent contract
         try:
-            nonce = self.web3.eth.get_transaction_count(self.account.address)
-            gas_price = self.web3.eth.gas_price
-
-            # Build transaction with corrected signature parameter
-            tx = self.oracle.contract.functions.respondToTask(
-                task_struct, task_index, signature_bytes  # Pass just the signature bytes
-            ).build_transaction(
-                {
-                    "from": self.account.address,
-                    "nonce": nonce,
-                    "gas": 500000,
-                    "gasPrice": gas_price,
-                }
+            # Pass only task_index and signature to the optimized function
+            tx_hash = self.agent.process_task(
+                task_index,
+                signature_bytes
             )
-
-            # Sign and send with the corrected attribute name
-            signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-
+            
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
             if receipt["status"] == 1:
-                logger.info(f"Response submitted successfully: {tx_hash.hex()}")
+                logger.info(f"Response submitted successfully via AIAgent: {tx_hash}")
             else:
-                logger.error(f"Response submission failed: {receipt}")
-
+                logger.error(f"Response submission via AIAgent failed: {receipt}")
         except Exception as e:
-            logger.error(f"Error submitting response: {e}")
+            logger.error(f"Error submitting response via AIAgent: {e}")
             raise
+

@@ -66,7 +66,7 @@ def update_config():
         # Update with contract addresses
         config.update(
             {
-                "provider": ANVIL_URL,
+                "rpc_url": ANVIL_URL,
                 "oracle_address": oracle_address,
                 "registry_address": registry_address,
                 "market_address": hook_address,

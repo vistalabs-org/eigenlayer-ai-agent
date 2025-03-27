@@ -32,7 +32,7 @@ def load_config(config_path=None):
     # Default config if none found
     print("No configuration file found, using default local setup")
     return {
-        "provider": "http://localhost:8545",
+        "rpc_url": "http://localhost:8545",
         "oracle_address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
         "registry_address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
         "agent_address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
@@ -55,7 +55,7 @@ def get_web3_instance(provider_uri=None, config=None):
     if not provider_uri:
         if not config:
             config = load_config()
-        provider_uri = config.get("provider", "http://localhost:8545")
+        provider_uri = config.get("rpc_url", "http://localhost:8545")
 
     web3 = setup_web3(provider_uri)
     if not web3.is_connected():

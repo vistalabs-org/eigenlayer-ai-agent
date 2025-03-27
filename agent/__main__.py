@@ -46,7 +46,7 @@ class PredictionMarketBridge:
         self.config = load_config(config_path)
 
         # Set up Web3 connection
-        provider_uri = self.config.get("provider", "http://localhost:8545")
+        provider_uri = self.config.get("rpc_url", "http://localhost:8545")
         self.web3 = setup_web3(provider_uri)
 
         # Get private key for transactions
@@ -332,9 +332,29 @@ class PredictionMarketBridge:
 
         return decision
 
-    async def submit_response_async(
-        self, task_index: int, task: Dict[str, Any], response: str
-    ):
+    def get_optimal_gas_price(self):
+        """Get optimal gas price based on recent blocks"""
+        # Get gas prices from last few blocks
+        gas_prices = []
+        latest_block = self.web3.eth.block_number
+        
+        # Sample gas prices from recent transactions
+        for i in range(5):  # Only check last 5 blocks
+            if latest_block - i >= 0:
+                block = self.web3.eth.get_block(latest_block - i, True)
+                for tx in block.transactions[:5]:  # Limit to 5 transactions per block
+                    if hasattr(tx, 'gasPrice'):
+                        gas_prices.append(tx.gasPrice)
+        
+        if not gas_prices:
+            return self.web3.eth.gas_price
+        
+        # Use a lower percentile for less urgent transactions
+        gas_prices.sort()
+        index = int(len(gas_prices) * 0.3)  # 30th percentile
+        return gas_prices[index]
+
+    async def submit_response_async(self, task_index: int, task: Dict[str, Any], response: str):
         """
         Async version of submit_response
 
@@ -357,34 +377,92 @@ class PredictionMarketBridge:
             "taskCreatedBlock": task.get("taskCreatedBlock", 0),
         }
 
-        # Sign the response
-        task_data = task.get("name", "")
-        message = f"Hello, {task_data}"
+        # Sign the response with more efficient approach
+        message = f"Task {task_index} response: {response[:10]}"  # Limit message size
         signature_hash = self.web3.keccak(text=message)
-        signature = self.web3.eth.account.sign_message(
-            Web3.to_bytes(hexstr=signature_hash.hex()), private_key=self.private_key
-        ).signature
+        
+        try:
+            # Use encode_defunct from eth_account.messages if available
+            from eth_account.messages import encode_defunct
+            signable_message = encode_defunct(hexstr=signature_hash.hex())
+            signature = self.web3.eth.account.sign_message(
+                signable_message, 
+                private_key=self.private_key
+            ).signature
+        except ImportError:
+            # Fallback for older web3.py versions
+            signature = self.web3.eth.account.sign_message(
+                Web3.to_bytes(hexstr=signature_hash.hex()), 
+                private_key=self.private_key
+            ).signature
 
         # Submit to blockchain
         try:
             nonce = self.web3.eth.get_transaction_count(self.account.address)
-            gas_price = self.web3.eth.gas_price
-
-            # Build transaction
-            tx = self.oracle.contract.functions.respondToTask(
-                task_struct, task_index, signature
-            ).build_transaction(
-                {
-                    "from": self.account.address,
-                    "nonce": nonce,
-                    "gas": 500000,
-                    "gasPrice": gas_price,
-                }
-            )
+            
+            # Try to get optimal gas price
+            try:
+                gas_price = self.get_optimal_gas_price()
+            except Exception as e:
+                logger.warning(f"Could not get optimal gas price: {e}")
+                gas_price = self.web3.eth.gas_price
+            
+            # Try EIP-1559 transaction style
+            try:
+                # Get base fee from latest block
+                latest_block = self.web3.eth.get_block('latest')
+                base_fee = latest_block.baseFeePerGas
+                max_priority_fee = self.web3.to_wei(1, 'gwei')
+                max_fee_per_gas = int(base_fee * 1.5) + max_priority_fee
+                
+                # Estimate gas with buffer
+                estimated_gas = self.oracle.contract.functions.respondToTask(
+                    task_struct, task_index, signature
+                ).estimate_gas({"from": self.account.address})
+                gas_limit = int(estimated_gas * 1.2)  # 20% buffer
+                
+                # Build EIP-1559 transaction
+                tx = self.oracle.contract.functions.respondToTask(
+                    task_struct, task_index, signature
+                ).build_transaction(
+                    {
+                        "from": self.account.address,
+                        "nonce": nonce,
+                        "gas": gas_limit,
+                        "maxFeePerGas": max_fee_per_gas,
+                        "maxPriorityFeePerGas": max_priority_fee,
+                        "type": 2  # EIP-1559 transaction
+                    }
+                )
+            except Exception as e:
+                # Fallback to legacy transaction type
+                logger.warning(f"Could not create EIP-1559 transaction: {e}, falling back to legacy")
+                
+                # Estimate gas with buffer
+                try:
+                    estimated_gas = self.oracle.contract.functions.respondToTask(
+                        task_struct, task_index, signature
+                    ).estimate_gas({"from": self.account.address})
+                    gas_limit = int(estimated_gas * 1.2)  # 20% buffer
+                except Exception as e_gas:
+                    logger.warning(f"Gas estimation failed: {e_gas}, using safe default")
+                    gas_limit = 300000  # Reduced from 500000
+                
+                # Build legacy transaction
+                tx = self.oracle.contract.functions.respondToTask(
+                    task_struct, task_index, signature
+                ).build_transaction(
+                    {
+                        "from": self.account.address,
+                        "nonce": nonce,
+                        "gas": gas_limit,
+                        "gasPrice": gas_price,
+                    }
+                )
 
             # Sign and send
             signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
@@ -418,23 +496,70 @@ class PredictionMarketBridge:
 
         try:
             nonce = self.web3.eth.get_transaction_count(self.account.address)
-            gas_price = self.web3.eth.gas_price
-
-            # Build transaction
-            tx = self.market_hook.functions.resolveMarket(
-                market_id, decision
-            ).build_transaction(
-                {
-                    "from": self.account.address,
-                    "nonce": nonce,
-                    "gas": 300000,
-                    "gasPrice": gas_price,
-                }
-            )
+            
+            # Try to get optimal gas price
+            try:
+                gas_price = self.get_optimal_gas_price()
+            except Exception as e:
+                logger.warning(f"Could not get optimal gas price: {e}")
+                gas_price = self.web3.eth.gas_price
+            
+            # Try EIP-1559 transaction style
+            try:
+                # Get base fee from latest block
+                latest_block = self.web3.eth.get_block('latest')
+                base_fee = latest_block.baseFeePerGas
+                max_priority_fee = self.web3.to_wei(1, 'gwei')
+                max_fee_per_gas = int(base_fee * 1.5) + max_priority_fee
+                
+                # Estimate gas with buffer
+                estimated_gas = self.market_hook.functions.resolveMarket(
+                    market_id, decision
+                ).estimate_gas({"from": self.account.address})
+                gas_limit = int(estimated_gas * 1.2)  # 20% buffer
+                
+                # Build EIP-1559 transaction
+                tx = self.market_hook.functions.resolveMarket(
+                    market_id, decision
+                ).build_transaction(
+                    {
+                        "from": self.account.address,
+                        "nonce": nonce,
+                        "gas": gas_limit,
+                        "maxFeePerGas": max_fee_per_gas,
+                        "maxPriorityFeePerGas": max_priority_fee,
+                        "type": 2  # EIP-1559 transaction
+                    }
+                )
+            except Exception as e:
+                # Fallback to legacy transaction type
+                logger.warning(f"Could not create EIP-1559 transaction: {e}, falling back to legacy")
+                
+                # Estimate gas with buffer
+                try:
+                    estimated_gas = self.market_hook.functions.resolveMarket(
+                        market_id, decision
+                    ).estimate_gas({"from": self.account.address})
+                    gas_limit = int(estimated_gas * 1.2)  # 20% buffer
+                except Exception as e_gas:
+                    logger.warning(f"Gas estimation failed: {e_gas}, using safe default")
+                    gas_limit = 200000  # Reduced from 300000
+                
+                # Build legacy transaction
+                tx = self.market_hook.functions.resolveMarket(
+                    market_id, decision
+                ).build_transaction(
+                    {
+                        "from": self.account.address,
+                        "nonce": nonce,
+                        "gas": gas_limit,
+                        "gasPrice": gas_price,
+                    }
+                )
 
             # Sign and send
             signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
@@ -448,7 +573,7 @@ class PredictionMarketBridge:
             logger.error(f"Error resolving market: {e}")
             import traceback
 
-            traceback.print_exc()
+            traceback.print_exc() 
 
     def resolve_market(self, market_id: str, decision: bool):
         """
