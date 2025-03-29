@@ -139,7 +139,7 @@ class Oracle:
                     gas_limit = int(estimated_gas * 1.5)  # Increase buffer to 50%
                 except Exception as e_gas:
                     logger.warning(f"Gas estimation failed: {e_gas}, using safe default")
-                    gas_limit = 22636  # Increased from 300000 to be much safer
+                    gas_limit = 300000  # Increased from 300000 to be much safer
                 
                 # Build legacy transaction
                 tx = self.contract.functions.createNewTask(name).build_transaction(

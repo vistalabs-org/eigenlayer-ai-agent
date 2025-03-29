@@ -5,6 +5,7 @@ from web3 import Web3
 
 from .utils import load_abi
 
+from loguru import logger
 
 class AgentDetails(BaseModel):
     model_type: str
@@ -91,9 +92,11 @@ class Registry:
                 "gasPrice": self.web3.eth.gas_price,
             }
         )
+        
+        logger.info(f"Registering agent: {agent_address}")
 
         # Sign and send
         signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
         return tx_hash.hex()

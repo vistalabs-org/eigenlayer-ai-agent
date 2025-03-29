@@ -63,7 +63,7 @@ class AgentInterface:
             {
                 "from": self.account.address,
                 "nonce": self.web3.eth.get_transaction_count(self.account.address),
-                "gas": 22636,
+                "gas": 3000000,
                 "gasPrice": gas_price
             }
         )

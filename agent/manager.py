@@ -74,6 +74,7 @@ class AgentManager:
         self.agent = AgentInterface(web3, agent_address, private_key)
 
     async def setup(self):
+        # TODO: Add a check to see if the agent is already registered
         """Setup the agent - register if needed"""
         if not self.is_registered:
             logger.info(f"Checking agent registration: {self.agent_address}")
@@ -205,7 +206,7 @@ class AgentManager:
             task: Task data
 
         Returns:
-            Response from AI agent
+            Response string (YES or NO)
         """
         task_content = task.get("name", "")
 
@@ -222,24 +223,26 @@ class AgentManager:
 
         # Call AI agent if available or return mock response for testing
         if self.ai_backend:
-            response = self.ai_backend.generate_response(prompt)
-            logger.info(f"AI response: {response}")
+            full_response = self.ai_backend.generate_response(prompt)
+            logger.info(f"AI response: {full_response}")
         else:
             # Mock response for testing when no API key is available
             logger.info("Using mock response (no API key provided)")
-            response = "YES, based on current market trends and analyst projections."
+            full_response = "YES, based on current market trends and analyst projections."
 
-        # Extract YES/NO from response
-        if response.startswith("YES"):
-            decision = "YES"
-        elif response.startswith("NO"):
-            decision = "NO"
+        # Extract YES/NO from response - improved parsing
+        response_upper = full_response.strip().upper()
+        
+        if response_upper.startswith("NO"):
+            return "NO"
+        elif response_upper.startswith("YES"):
+            return "YES"
         else:
-            # Default to NO if unclear
-            logger.info(f"Could not extract clear YES/NO from response: {response}")
-            decision = "NO"
-
-        return decision
+            # Default to NO if unclear, but log the issue
+            logger.warning(
+                f"Could not clearly extract YES/NO from response, defaulting to NO. Response: {full_response[:100]}..."
+            )
+            return "NO"
 
     def submit_response(self, task_index: int, task: Dict[str, Any], response: str):
         """
