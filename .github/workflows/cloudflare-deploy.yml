@@ -26,13 +26,11 @@ jobs:
       - name: Install Foundry (Anvil)
         run: |
           curl -L https://foundry.paradigm.xyz | bash
-          source $HOME/.bashrc
-          source $HOME/.cargo/env
+          echo "$HOME/.foundry/bin" >> $GITHUB_PATH
           foundryup
 
       - name: Start Anvil
         run: |
-          export PATH="$PATH:$HOME/.foundry/bin"
           anvil &
           sleep 5  # Wait for Anvil to start
 
