@@ -1,0 +1,41 @@
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_VERSION=1.5.1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    poetry config virtualenvs.create false
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml poetry.lock ./
+
+# Install dependencies
+RUN poetry install --no-dev --no-interaction
+
+# Copy the rest of the application
+COPY . .
+
+# Create a non-root user to run the agent
+RUN useradd -m agent
+USER agent
+
+# Set the command to run the agent
+CMD ["python", "-m", "agent", "--config", "config.json"]
+
+# Add label for the Cloudflare Workers
+LABEL com.cloudflare.w.name="eigenlayer-ai-agent" 
