@@ -23,11 +23,10 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: Install Foundry (Anvil)
-        run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          echo "$HOME/.foundry/bin" >> $GITHUB_PATH
-          foundryup
+      - name: Install Foundry
+        uses: foundry-rs/setup-foundry@v1
+        with:
+          version: nightly # Or specify a specific version
 
       - name: Start Anvil
         run: |
