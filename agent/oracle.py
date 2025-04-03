@@ -8,6 +8,7 @@ from .utils import load_abi
 
 from loguru import logger
 
+
 class TaskStatus(IntEnum):
     CREATED = 0
     IN_PROGRESS = 1
@@ -51,19 +52,19 @@ class Oracle:
         # Get gas prices from last few blocks
         gas_prices = []
         latest_block = self.web3.eth.block_number
-        
+
         # Sample gas prices from recent transactions
         for i in range(5):  # Only check last 5 blocks
             if latest_block - i >= 0:
                 block = self.web3.eth.get_block(latest_block - i, True)
                 for tx in block.transactions[:5]:  # Limit to 5 transactions per block
-                    if hasattr(tx, 'gasPrice'):
+                    if hasattr(tx, "gasPrice"):
                         gas_prices.append(tx.gasPrice)
-        
+
         if not gas_prices:
             # Add 20% to the network's suggested gas price if no historical data
             return int(self.web3.eth.gas_price * 1.2)
-        
+
         # Use a higher percentile for more urgent transactions (60th instead of 30th)
         gas_prices.sort()
         index = int(len(gas_prices) * 0.6)  # 60th percentile
@@ -98,24 +99,24 @@ class Oracle:
             except Exception as e:
                 logger.warning(f"Could not get optimal gas price: {e}")
                 gas_price = self.web3.eth.gas_price
-            
+
             # Get nonce
             nonce = self.web3.eth.get_transaction_count(self.account.address)
-            
+
             # Try EIP-1559 transaction style
             try:
                 # Get base fee from latest block
-                latest_block = self.web3.eth.get_block('latest')
+                latest_block = self.web3.eth.get_block("latest")
                 base_fee = latest_block.baseFeePerGas
-                max_priority_fee = self.web3.to_wei(1, 'gwei')
+                max_priority_fee = self.web3.to_wei(1, "gwei")
                 max_fee_per_gas = int(base_fee * 1.5) + max_priority_fee
-                
+
                 # Estimate gas with buffer
-                estimated_gas = self.contract.functions.createNewTask(name).estimate_gas(
-                    {"from": self.account.address}
-                )
+                estimated_gas = self.contract.functions.createNewTask(
+                    name
+                ).estimate_gas({"from": self.account.address})
                 gas_limit = int(estimated_gas * 1.2)  # 20% buffer
-                
+
                 # Build EIP-1559 transaction
                 tx = self.contract.functions.createNewTask(name).build_transaction(
                     {
@@ -124,23 +125,27 @@ class Oracle:
                         "gas": gas_limit,
                         "maxFeePerGas": max_fee_per_gas,
                         "maxPriorityFeePerGas": max_priority_fee,
-                        "type": 2  # EIP-1559 transaction
+                        "type": 2,  # EIP-1559 transaction
                     }
                 )
             except Exception as e:
                 # Fallback to legacy transaction type
-                logger.warning(f"Could not create EIP-1559 transaction: {e}, falling back to legacy")
-                
+                logger.warning(
+                    f"Could not create EIP-1559 transaction: {e}, falling back to legacy"
+                )
+
                 # Estimate gas with buffer
                 try:
-                    estimated_gas = self.contract.functions.createNewTask(name).estimate_gas(
-                        {"from": self.account.address}
-                    )
+                    estimated_gas = self.contract.functions.createNewTask(
+                        name
+                    ).estimate_gas({"from": self.account.address})
                     gas_limit = int(estimated_gas * 1.5)  # Increase buffer to 50%
                 except Exception as e_gas:
-                    logger.warning(f"Gas estimation failed: {e_gas}, using safe default")
+                    logger.warning(
+                        f"Gas estimation failed: {e_gas}, using safe default"
+                    )
                     gas_limit = 300000  # Increased from 300000 to be much safer
-                
+
                 # Build legacy transaction
                 tx = self.contract.functions.createNewTask(name).build_transaction(
                     {
@@ -168,7 +173,7 @@ class Oracle:
 
             return tx_hash.hex(), current_task_num
         except Exception as e:
-            raise ValueError(f"Failed to create task: {e}") 
+            raise ValueError(f"Failed to create task: {e}")
 
     def get_task_status(self, task_index: int) -> TaskStatus:
         """Get the status of a task"""
@@ -190,16 +195,16 @@ class Oracle:
     def reconstruct_task(self, task_index: int) -> Dict[str, Any]:
         """
         Reconstructs a task from blockchain data
-        
+
         Args:
             task_index: Index of the task to reconstruct
-            
+
         Returns:
             Dictionary with task data
         """
         try:
             # FIRST APPROACH: Try to call the tasks() function which often exists in Oracle contracts
-            if hasattr(self.contract.functions, 'tasks'):
+            if hasattr(self.contract.functions, "tasks"):
                 try:
                     task_data = self.contract.functions.tasks(task_index).call()
                     logger.info(f"Retrieved task using tasks(): {task_data}")
@@ -210,28 +215,42 @@ class Oracle:
             # SECOND APPROACH: Try to get the task description directly
             try:
                 # Direct access to task descriptions (try all possible function names)
-                for func_name in ['taskDescriptions', 'taskDescription', 'getTaskDescription']:
+                for func_name in [
+                    "taskDescriptions",
+                    "taskDescription",
+                    "getTaskDescription",
+                ]:
                     if hasattr(self.contract.functions, func_name):
                         try:
-                            description = getattr(self.contract.functions, func_name)(task_index).call()
-                            logger.info(f"Retrieved task description using {func_name}: {description}")
+                            description = getattr(self.contract.functions, func_name)(
+                                task_index
+                            ).call()
+                            logger.info(
+                                f"Retrieved task description using {func_name}: {description}"
+                            )
                             return {
-                                'name': description,
-                                'taskCreatedBlock': self.web3.eth.block_number,
+                                "name": description,
+                                "taskCreatedBlock": self.web3.eth.block_number,
                             }
                         except Exception as e:
-                            logger.warning(f"Could not get task description using {func_name}: {e}")
+                            logger.warning(
+                                f"Could not get task description using {func_name}: {e}"
+                            )
             except Exception as e:
                 logger.warning(f"Failed to get task description: {e}")
 
             # THIRD APPROACH: Try to access the Task struct directly
             try:
                 # Check if there's a function to view a task
-                for view_func in ['viewTask', 'getTask']:
+                for view_func in ["viewTask", "getTask"]:
                     if hasattr(self.contract.functions, view_func):
                         try:
-                            task_struct = getattr(self.contract.functions, view_func)(task_index).call()
-                            logger.info(f"Retrieved task using {view_func}: {task_struct}")
+                            task_struct = getattr(self.contract.functions, view_func)(
+                                task_index
+                            ).call()
+                            logger.info(
+                                f"Retrieved task using {view_func}: {task_struct}"
+                            )
                             return self._parse_task_data(task_struct)
                         except Exception as e:
                             logger.warning(f"Could not get task using {view_func}: {e}")
@@ -241,44 +260,56 @@ class Oracle:
             # FOURTH APPROACH: Try to get past events but with proper web3.py format
             try:
                 # Get filter directly from the contract, don't use get_logs with fromBlock param
-                for event_name in ['NewTaskCreated', 'TaskCreated']:
+                for event_name in ["NewTaskCreated", "TaskCreated"]:
                     if hasattr(self.contract.events, event_name):
                         try:
                             # Create filter object first
-                            event_filter = getattr(self.contract.events, event_name).create_filter(
-                                fromBlock=0,
-                                toBlock='latest'
-                            )
+                            event_filter = getattr(
+                                self.contract.events, event_name
+                            ).create_filter(fromBlock=0, toBlock="latest")
                             # Get all entries from filter
                             entries = event_filter.get_all_entries()
                             logger.info(f"Found {len(entries)} events for {event_name}")
-                            
+
                             # Parse entries to find our task
                             for entry in entries:
-                                args = entry['args']
+                                args = entry["args"]
                                 logger.debug(f"Event args: {args}")
-                                
+
                                 # Try to find task index in various possible field names
                                 task_num = None
                                 task_desc = None
-                                
+
                                 # Look for fields by common names
                                 for field, value in args.items():
                                     field_lower = field.lower()
-                                    if 'task' in field_lower and ('num' in field_lower or 'index' in field_lower or 'id' in field_lower):
+                                    if "task" in field_lower and (
+                                        "num" in field_lower
+                                        or "index" in field_lower
+                                        or "id" in field_lower
+                                    ):
                                         task_num = value
-                                    elif 'desc' in field_lower or 'question' in field_lower or 'title' in field_lower:
+                                    elif (
+                                        "desc" in field_lower
+                                        or "question" in field_lower
+                                        or "title" in field_lower
+                                    ):
                                         task_desc = value
-                                
+
                                 # If we found our task
                                 if task_num is not None and task_num == task_index:
-                                    logger.info(f"Found task {task_index} in event: {task_desc}")
+                                    logger.info(
+                                        f"Found task {task_index} in event: {task_desc}"
+                                    )
                                     return {
-                                        'name': task_desc or f"Task from {event_name} event #{task_index}",
-                                        'taskCreatedBlock': entry['blockNumber'],
+                                        "name": task_desc
+                                        or f"Task from {event_name} event #{task_index}",
+                                        "taskCreatedBlock": entry["blockNumber"],
                                     }
                         except Exception as e:
-                            logger.warning(f"Error getting events for {event_name}: {e}")
+                            logger.warning(
+                                f"Error getting events for {event_name}: {e}"
+                            )
             except Exception as e:
                 logger.warning(f"Failed to get task from events: {e}")
 
@@ -287,47 +318,58 @@ class Oracle:
                 # If task index is in valid range, try to read raw contract state
                 if task_index < self.contract.functions.latestTaskNum().call():
                     # For AIOracleServiceManager from test contract
-                    if hasattr(self.contract.functions, 'createNewTask'):
+                    if hasattr(self.contract.functions, "createNewTask"):
                         # Look for the prediction market question in the test contract
                         # This is based on PredictionMarketAITest.t.sol contract
                         market_title = "Will AI replace developers by 2030?"
                         market_desc = "Market resolves to YES if AI systems can autonomously create complete production applications by 2030"
                         task_desc = f"Prediction market question: {market_title}. Please respond with YES or NO."
-                        
-                        logger.info(f"Using hardcoded test market question for task {task_index}")
+
+                        logger.info(
+                            f"Using hardcoded test market question for task {task_index}"
+                        )
                         return {
-                            'name': task_desc,
-                            'taskCreatedBlock': 0,
+                            "name": task_desc,
+                            "taskCreatedBlock": 0,
                         }
-                
+
                 # Debugging available contract calls
-                functions = [fn for fn in dir(self.contract.functions) if not fn.startswith('_')]
+                functions = [
+                    fn for fn in dir(self.contract.functions) if not fn.startswith("_")
+                ]
                 logger.debug(f"Available contract functions: {functions}")
-                
+
                 # Try some common patterns in Oracle contracts
-                if hasattr(self.contract.functions, 'allTaskHashes'):
+                if hasattr(self.contract.functions, "allTaskHashes"):
                     task_hash = self.contract.functions.allTaskHashes(task_index).call()
                     return {
-                        'name': f"Task with hash: {task_hash.hex()}",
-                        'taskCreatedBlock': 0,
+                        "name": f"Task with hash: {task_hash.hex()}",
+                        "taskCreatedBlock": 0,
                     }
             except Exception as e:
                 logger.warning(f"Failed in last resort approach: {e}")
-        
+
         except Exception as e:
             logger.error(f"Error reconstructing task: {e}")
-        
+
         # FALLBACK WITH HARDCODED DATA - Based on PredictionMarketAITest.t.sol
         # This is specifically tailored for the test environment
         if task_index == 0:
             market_title = "Will AI replace developers by 2030?"
             task_desc = f"Prediction market question: {market_title}. Please respond with YES or NO."
-            logger.warning(f"Using hardcoded market question for task {task_index}: {task_desc}")
+            logger.warning(
+                f"Using hardcoded market question for task {task_index}: {task_desc}"
+            )
             return {
-                'name': task_desc,
-                'taskCreatedBlock': 0,
+                "name": task_desc,
+                "taskCreatedBlock": 0,
             }
         else:
-            placeholder = {'name': f"Prediction market question: Will the Bitcoin price exceed $100,000 by the end of 2025? Please respond with YES or NO.", 'taskCreatedBlock': 0}
-            logger.warning(f"Using fallback market question for task {task_index}: {placeholder}")
+            placeholder = {
+                "name": f"Prediction market question: Will the Bitcoin price exceed $100,000 by the end of 2025? Please respond with YES or NO.",
+                "taskCreatedBlock": 0,
+            }
+            logger.warning(
+                f"Using fallback market question for task {task_index}: {placeholder}"
+            )
             return placeholder

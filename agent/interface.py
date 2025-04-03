@@ -42,11 +42,11 @@ class AgentInterface:
     def process_task(self, task_index, signature):
         """
         Process a task and submit the agent's response
-        
+
         Args:
             task_index: The task index
             signature: The signature representing the response
-            
+
         Returns:
             Transaction hash
         """
@@ -54,7 +54,7 @@ class AgentInterface:
             raise ValueError("Private key not provided, cannot send transactions")
 
         logger.info(f"Processing task {task_index} with signature {signature}")
-        gas_price = self.web3.to_wei(1, 'gwei')
+        gas_price = self.web3.to_wei(1, "gwei")
 
         # Create transaction with legacy format - directly use task_index instead of full task
         tx = self.contract.functions.processTask(
@@ -64,10 +64,10 @@ class AgentInterface:
                 "from": self.account.address,
                 "nonce": self.web3.eth.get_transaction_count(self.account.address),
                 "gas": 3000000,
-                "gasPrice": gas_price
+                "gasPrice": gas_price,
             }
         )
-        
+
         logger.info(f"Transaction: {tx}")
 
         signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)

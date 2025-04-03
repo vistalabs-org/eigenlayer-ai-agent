@@ -228,11 +228,13 @@ class AgentManager:
         else:
             # Mock response for testing when no API key is available
             logger.info("Using mock response (no API key provided)")
-            full_response = "YES, based on current market trends and analyst projections."
+            full_response = (
+                "YES, based on current market trends and analyst projections."
+            )
 
         # Extract YES/NO from response - improved parsing
         response_upper = full_response.strip().upper()
-        
+
         if response_upper.startswith("NO"):
             return "NO"
         elif response_upper.startswith("YES"):
@@ -247,7 +249,7 @@ class AgentManager:
     def submit_response(self, task_index: int, task: Dict[str, Any], response: str):
         """
         Submit response via AIAgent contract
-        
+
         Args:
             task_index: Task index
             task: Task data
@@ -261,24 +263,20 @@ class AgentManager:
 
         logger.info(f"Signing message: {message}")
         signature_hash = self.web3.keccak(text=message)
-        
+
         signable_message = encode_defunct(hexstr=signature_hash.hex())
         signature_object = self.web3.eth.account.sign_message(
-            signable_message,
-            private_key=self.private_key
+            signable_message, private_key=self.private_key
         )
-        
+
         # Extract signature bytes
         signature_bytes = signature_object.signature
-        
+
         # Submit to blockchain via the AIAgent contract
         try:
             # Pass only task_index and signature to the optimized function
-            tx_hash = self.agent.process_task(
-                task_index,
-                signature_bytes
-            )
-            
+            tx_hash = self.agent.process_task(task_index, signature_bytes)
+
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
@@ -289,4 +287,3 @@ class AgentManager:
         except Exception as e:
             logger.error(f"Error submitting response via AIAgent: {e}")
             raise
-

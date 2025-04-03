@@ -73,10 +73,10 @@ class OpenRouterBackend:
 
         data = response.json()
         print(f"OpenRouter response: {data}")
-        
+
         if "error" in data:
             raise Exception(f"OpenRouter API error: {data['error']['message']}")
-        
+
         return data["choices"][0]["message"]["content"]
 
     def search_web(self, query: str) -> List[Dict[str, str]]:

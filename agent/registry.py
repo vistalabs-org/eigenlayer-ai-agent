@@ -7,6 +7,7 @@ from .utils import load_abi
 
 from loguru import logger
 
+
 class AgentDetails(BaseModel):
     model_type: str
     model_version: str
@@ -92,7 +93,7 @@ class Registry:
                 "gasPrice": self.web3.eth.gas_price,
             }
         )
-        
+
         logger.info(f"Registering agent: {agent_address}")
 
         # Sign and send

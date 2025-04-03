@@ -90,7 +90,7 @@ def get_oracle_instance(web3, oracle_address=None, private_key=None, config=None
 def create_oracle_task(
     oracle,
     task_data="Prediction market question: Will ETH reach $5000 by the end of 2025?"
-        " Please respond with YES or NO.",
+    " Please respond with YES or NO.",
 ):
     """
     Create a task in the Oracle contract and return the transaction hash and task index.
