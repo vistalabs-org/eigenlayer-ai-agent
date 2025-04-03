@@ -2,14 +2,14 @@ import asyncio
 from enum import IntEnum
 from typing import Any, Dict
 
+from eth_account.messages import encode_defunct
 from loguru import logger
 from web3 import Web3
-from eth_account.messages import encode_defunct
 
+from .interface import AgentInterface
 from .llm import OpenRouterBackend
 from .oracle import Oracle, TaskStatus
 from .registry import Registry
-from .interface import AgentInterface
 
 
 # Define agent status enum (moved from agent.py)
@@ -242,7 +242,8 @@ class AgentManager:
         else:
             # Default to NO if unclear, but log the issue
             logger.warning(
-                f"Could not clearly extract YES/NO from response, defaulting to NO. Response: {full_response[:100]}..."
+                "Could not clearly extract YES/NO from response,"
+                " defaulting to NO. Response: {full_response[:100]}..."
             )
             return "NO"
 

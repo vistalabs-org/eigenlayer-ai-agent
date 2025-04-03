@@ -1,12 +1,11 @@
 from enum import IntEnum
 from typing import Any, Dict, List, Optional, Tuple
 
+from loguru import logger
 from pydantic import BaseModel
 from web3 import Web3
 
 from .utils import load_abi
-
-from loguru import logger
 
 
 class TaskStatus(IntEnum):
@@ -131,7 +130,8 @@ class Oracle:
             except Exception as e:
                 # Fallback to legacy transaction type
                 logger.warning(
-                    f"Could not create EIP-1559 transaction: {e}, falling back to legacy"
+                    f"Could not create EIP-1559 transaction: {e},"
+                    " falling back to legacy"
                 )
 
                 # Estimate gas with buffer
@@ -203,7 +203,6 @@ class Oracle:
             Dictionary with task data
         """
         try:
-            # FIRST APPROACH: Try to call the tasks() function which often exists in Oracle contracts
             if hasattr(self.contract.functions, "tasks"):
                 try:
                     task_data = self.contract.functions.tasks(task_index).call()
@@ -226,7 +225,8 @@ class Oracle:
                                 task_index
                             ).call()
                             logger.info(
-                                f"Retrieved task description using {func_name}: {description}"
+                                f"Retrieved task description using {func_name}: "
+                                f"{description}"
                             )
                             return {
                                 "name": description,
@@ -259,7 +259,6 @@ class Oracle:
 
             # FOURTH APPROACH: Try to get past events but with proper web3.py format
             try:
-                # Get filter directly from the contract, don't use get_logs with fromBlock param
                 for event_name in ["NewTaskCreated", "TaskCreated"]:
                     if hasattr(self.contract.events, event_name):
                         try:
@@ -276,7 +275,6 @@ class Oracle:
                                 args = entry["args"]
                                 logger.debug(f"Event args: {args}")
 
-                                # Try to find task index in various possible field names
                                 task_num = None
                                 task_desc = None
 
@@ -303,7 +301,8 @@ class Oracle:
                                     )
                                     return {
                                         "name": task_desc
-                                        or f"Task from {event_name} event #{task_index}",
+                                        or f"Task from {event_name} "
+                                        "event #{task_index}",
                                         "taskCreatedBlock": entry["blockNumber"],
                                     }
                         except Exception as e:
@@ -322,11 +321,12 @@ class Oracle:
                         # Look for the prediction market question in the test contract
                         # This is based on PredictionMarketAITest.t.sol contract
                         market_title = "Will AI replace developers by 2030?"
-                        market_desc = "Market resolves to YES if AI systems can autonomously create complete production applications by 2030"
-                        task_desc = f"Prediction market question: {market_title}. Please respond with YES or NO."
+                        task_desc = f"Prediction market question: {market_title}."
+                        " Please respond with YES or NO."
 
                         logger.info(
-                            f"Using hardcoded test market question for task {task_index}"
+                            "Using hardcoded test market question "
+                            f"for task {task_index}"
                         )
                         return {
                             "name": task_desc,
@@ -356,7 +356,8 @@ class Oracle:
         # This is specifically tailored for the test environment
         if task_index == 0:
             market_title = "Will AI replace developers by 2030?"
-            task_desc = f"Prediction market question: {market_title}. Please respond with YES or NO."
+            task_desc = f"Prediction market question: {market_title}."
+            " Please respond with YES or NO."
             logger.warning(
                 f"Using hardcoded market question for task {task_index}: {task_desc}"
             )
@@ -366,7 +367,8 @@ class Oracle:
             }
         else:
             placeholder = {
-                "name": f"Prediction market question: Will the Bitcoin price exceed $100,000 by the end of 2025? Please respond with YES or NO.",
+                "name": "Prediction market question: Will the Bitcoin price"
+                " exceed $100,000 by the end of 2025? Please respond with YES or NO.",
                 "taskCreatedBlock": 0,
             }
             logger.warning(

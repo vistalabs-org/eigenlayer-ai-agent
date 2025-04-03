@@ -1,11 +1,10 @@
 from typing import List, Optional
 
+from loguru import logger
 from pydantic import BaseModel
 from web3 import Web3
 
 from .utils import load_abi
-
-from loguru import logger
 
 
 class AgentDetails(BaseModel):

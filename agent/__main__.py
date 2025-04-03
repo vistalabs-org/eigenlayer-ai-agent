@@ -438,7 +438,8 @@ class PredictionMarketBridge:
             except Exception as e:
                 # Fallback to legacy transaction type
                 logger.warning(
-                    f"Could not create EIP-1559 transaction: {e}, falling back to legacy"
+                    f"Could not create EIP-1559 transaction: {e},"
+                    " falling back to legacy"
                 )
 
                 # Estimate gas with buffer
@@ -539,7 +540,8 @@ class PredictionMarketBridge:
             except Exception as e:
                 # Fallback to legacy transaction type
                 logger.warning(
-                    f"Could not create EIP-1559 transaction: {e}, falling back to legacy"
+                    f"Could not create EIP-1559 transaction: {e},"
+                    " falling back to legacy"
                 )
 
                 # Estimate gas with buffer

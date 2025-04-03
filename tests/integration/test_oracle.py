@@ -6,6 +6,7 @@ deployed on a local Anvil instance.
 """
 
 import sys
+
 import pytest
 import web3
 

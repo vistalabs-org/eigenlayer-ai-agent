@@ -1,6 +1,7 @@
 """Client for interacting with AIAgent contract"""
 
 from typing import Optional
+
 from loguru import logger
 from web3 import Web3
 
@@ -56,7 +57,6 @@ class AgentInterface:
         logger.info(f"Processing task {task_index} with signature {signature}")
         gas_price = self.web3.to_wei(1, "gwei")
 
-        # Create transaction with legacy format - directly use task_index instead of full task
         tx = self.contract.functions.processTask(
             task_index, signature
         ).build_transaction(

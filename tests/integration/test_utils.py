@@ -5,6 +5,7 @@ Common utility functions for integration tests.
 
 import json
 from pathlib import Path
+
 from agent.oracle import Oracle
 from agent.utils import setup_web3
 

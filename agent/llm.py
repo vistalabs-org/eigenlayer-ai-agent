@@ -3,8 +3,8 @@ LLM module for EigenLayer AI Agent
 Provides interfaces to AI models and search functionality
 """
 
-from typing import Dict, List, Optional
 import json
+from typing import Dict, List, Optional
 
 import requests
 

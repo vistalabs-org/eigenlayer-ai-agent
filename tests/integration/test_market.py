@@ -10,7 +10,9 @@ import json
 import logging
 import sys
 from pathlib import Path
+
 from agent.__main__ import PredictionMarketBridge
+
 from .test_utils import (
     create_oracle_task,
     get_default_private_key,
