@@ -27,9 +27,7 @@ jobs:
         run: poetry install
 
       - name: Install Foundry
-        uses: foundry-rs/setup-foundry@v1
-        with:
-          version: nightly # Or specify a specific version
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Start Anvil
         run: |
