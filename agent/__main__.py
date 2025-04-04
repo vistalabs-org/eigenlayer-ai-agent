@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from dotenv import load_dotenv
 from loguru import logger
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -24,7 +25,6 @@ from agent.oracle import Oracle, TaskStatus
 from agent.utils.config import load_config
 from agent.utils.logger import setup_logging
 from agent.utils.web3 import setup_web3
-from dotenv import load_dotenv
 
 
 class PredictionMarketBridge:
@@ -63,7 +63,7 @@ class PredictionMarketBridge:
 
         # Set up account
         if self.agent_private_key:
-            
+
             private_key_hex = self.agent_private_key
             if self.agent_private_key.startswith("0x"):
                 private_key_hex = private_key_hex[2:]
@@ -80,7 +80,7 @@ class PredictionMarketBridge:
                 "and ORACLE_ADDRESS env var not set."
             )
 
-        self.oracle = Oracle(self.web3, oracle_addr, self.private_key)
+        self.oracle = Oracle(self.web3, oracle_addr, self.agent_private_key)
         logger.info(f"Connected to Oracle at {oracle_addr}")
 
         # Use registry address from config
@@ -101,9 +101,6 @@ class PredictionMarketBridge:
                 logger.info(
                     f"Using address derived from AGENT_PRIVATE_KEY: {agent_addr}"
                 )
-            elif self.private_key:
-                agent_addr = self.account.address
-                logger.info(f"Using address derived from PRIVATE_KEY: {agent_addr}")
             else:
                 error_msg = (
                     "Agent address not in config, and cannot derive from env vars "
@@ -271,7 +268,7 @@ class PredictionMarketBridge:
             response = await self.get_ai_response_async(task)
 
             # Submit response to blockchain
-            if self.private_key:
+            if self.agent_private_key:
                 await self.submit_response_async(task_index, task, response)
                 logger.info(f"Submitted response for task {task_index}")
             else:
@@ -405,12 +402,13 @@ class PredictionMarketBridge:
 
             signable_message = encode_defunct(hexstr=signature_hash.hex())
             signature = self.web3.eth.account.sign_message(
-                signable_message, private_key=self.private_key
+                signable_message, private_key=self.agent_private_key
             ).signature
         except ImportError:
             # Fallback for older web3.py versions
             signature = self.web3.eth.account.sign_message(
-                Web3.to_bytes(hexstr=signature_hash.hex()), private_key=self.private_key
+                Web3.to_bytes(hexstr=signature_hash.hex()),
+                private_key=self.agent_private_key,
             ).signature
 
         # Submit to blockchain
@@ -483,7 +481,9 @@ class PredictionMarketBridge:
                 )
 
             # Sign and send
-            signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
+            signed_tx = self.web3.eth.account.sign_transaction(
+                tx, self.agent_private_key
+            )
             tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             # Wait for receipt
@@ -585,7 +585,9 @@ class PredictionMarketBridge:
                 )
 
             # Sign and send
-            signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
+            signed_tx = self.web3.eth.account.sign_transaction(
+                tx, self.agent_private_key
+            )
             tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             # Wait for receipt

@@ -5,8 +5,8 @@ This script tests interactions with the oracle contract
 deployed on a local Anvil instance.
 """
 
-import sys
 import os
+import sys
 
 import pytest
 import web3

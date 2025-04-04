@@ -28,8 +28,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     if not config_path.exists():
         logger.warning(
-            f"Configuration file {config_path} not found. "
-            f"Returning empty config."
+            f"Configuration file {config_path} not found. " f"Returning empty config."
         )
         return {}
 

@@ -114,7 +114,7 @@ def run_bridge(run_once=True):
             current_config_path = Path(__file__).parent.parent / "config.json"
             if not current_config_path.exists():
                 logger.error("config.json not found in CWD or project root.")
-                return False # Cannot run bridge without config
+                return False  # Cannot run bridge without config
 
         bridge = PredictionMarketBridge(
             config_path=str(current_config_path),
