@@ -1,7 +1,5 @@
 # Container files
 logs/
-*.sif
-config.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,20 +6,22 @@ This version assumes:
 2. Contracts are already deployed
 """
 
-import json
 import logging
 import sys
 from pathlib import Path
 
-from agent.__main__ import PredictionMarketBridge
+from dotenv import load_dotenv
 
-from .test_utils import (
+from agent.__main__ import PredictionMarketBridge
+from tests.integration.test_utils import (
     create_oracle_task,
-    get_default_private_key,
     get_oracle_instance,
     get_web3_instance,
     load_config,
 )
+
+# Load environment variables from .env file first
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,21 +32,39 @@ current_dir = Path(__file__).parent
 parent_dir = current_dir.parent.parent
 sys.path.append(str(parent_dir))
 
-# Configuration constants
-ANVIL_URL = "http://localhost:8545"
-CONFIG_PATH = parent_dir / "config.json"
+# --- Configuration Loading ---
+# Load configuration using the utility function from test_utils
+CONFIG = load_config()
 
-# Hardcoded contract addresses (from existing deployment)
-oracle_address = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-registry_address = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-hook_address = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+# Extract necessary configuration values
+RPC_URL = CONFIG.get("rpc_url", "http://localhost:8545")
+ORACLE_ADDRESS = CONFIG.get("oracle_address")
+# Needed by AgentManager called within Bridge
+REGISTRY_ADDRESS = CONFIG.get("registry_address")
+Hook_ADDRESS = CONFIG.get("market_address")
+
+# Log the configuration being used
+logger.info("--- Test Market Configuration ---")
+logger.info(f"RPC URL: {RPC_URL}")
+logger.info(f"Oracle Address: {ORACLE_ADDRESS}")
+logger.info(f"Registry Address: {REGISTRY_ADDRESS}")
+logger.info(f"Hook Address: {Hook_ADDRESS}")
+logger.info("-------------------------------")
+
+# Check required configuration from loaded config
+if not ORACLE_ADDRESS:
+    logger.error("'oracle_address' not found in configuration.")
+    sys.exit(1)
+if not REGISTRY_ADDRESS:
+    logger.error("'registry_address' not found in configuration.")
+    sys.exit(1)
 
 
 def check_blockchain_connection():
-    """Verify connection to the blockchain"""
-    web3 = get_web3_instance(ANVIL_URL)
+    """Verify connection to the blockchain using the config RPC URL"""
+    web3 = get_web3_instance(RPC_URL)
     if not web3:
-        logger.error("Could not connect to blockchain")
+        logger.error(f"Could not connect to blockchain at {RPC_URL}")
         return False
 
     # Get basic blockchain info
@@ -59,42 +79,13 @@ def check_blockchain_connection():
     return True
 
 
-def update_config():
-    """Update agent configuration with known contract addresses"""
-    try:
-        # Get existing config or create new one
-        config = load_config(CONFIG_PATH) if CONFIG_PATH.exists() else {}
-
-        # Update with contract addresses
-        config.update(
-            {
-                "rpc_url": ANVIL_URL,
-                "oracle_address": oracle_address,
-                "registry_address": registry_address,
-                "market_address": hook_address,
-            }
-        )
-
-        # Write config
-        with open(CONFIG_PATH, "w") as f:
-            json.dump(config, f, indent=2)
-
-        logger.info("Configuration updated")
-        return True
-    except Exception as e:
-        logger.error(f"Config update error: {e}")
-        return False
-
-
 def create_test_task():
-    """Create test task in oracle"""
-    # Get Web3 and Oracle instances
-    web3 = get_web3_instance(ANVIL_URL)
+    """Create test task in oracle using the loaded config addresses"""
+    web3 = get_web3_instance(RPC_URL)
     if not web3:
         return None
 
-    private_key = get_default_private_key()
-    oracle = get_oracle_instance(web3, oracle_address, private_key)
+    oracle = get_oracle_instance(web3, ORACLE_ADDRESS)
     if not oracle:
         return None
 
@@ -113,13 +104,22 @@ def create_test_task():
 
 
 def run_bridge(run_once=True):
-    """Run the prediction market bridge"""
+    """Run the prediction market bridge using the loaded config/addresses"""
     try:
-        # Create bridge instance
+        # Bridge uses the config file for non-sensitive parts,
+        # and we pass addresses explicitly if needed (though it might load them again)
+        # Sensitive keys are loaded from env by Bridge.__init__
+        current_config_path = Path.cwd() / "config.json"
+        if not current_config_path.exists():
+            current_config_path = Path(__file__).parent.parent / "config.json"
+            if not current_config_path.exists():
+                logger.error("config.json not found in CWD or project root.")
+                return False # Cannot run bridge without config
+
         bridge = PredictionMarketBridge(
-            config_path=str(CONFIG_PATH),
-            oracle_address=oracle_address,
-            market_address=hook_address,
+            config_path=str(current_config_path),
+            oracle_address=ORACLE_ADDRESS,
+            market_address=Hook_ADDRESS,
         )
 
         # Run the bridge
@@ -140,11 +140,6 @@ def test_blockchain_connection():
     assert check_blockchain_connection(), "Failed to connect to blockchain"
 
 
-def test_config_update():
-    """Test configuration update"""
-    assert update_config(), "Failed to update configuration"
-
-
 def test_task_creation():
     """Test oracle task creation"""
     task_index = create_test_task()
@@ -153,40 +148,37 @@ def test_task_creation():
 
 def test_bridge_run():
     """Test running the bridge"""
-    # Run the bridge in run_once mode
     result = run_bridge(run_once=True)
-    # It might fail, but we're not asserting here - just logging
     if not result:
         logger.warning("Bridge run failed, but test will continue")
 
 
 def test_e2e_integration():
     """Run the entire end-to-end test sequence"""
-    # Step 1: Check blockchain connection
+    logger.info("Starting end-to-end integration test...")
+    # Step 1: Check blockchain connection (uses config RPC_URL)
     test_blockchain_connection()
 
-    # Step 2: Update configuration
-    test_config_update()
-
-    # Step 3: Create a test task
+    # Step 2: Create a test task (uses config ORACLE_ADDRESS)
     test_task_creation()
 
-    # Step 4: Run the bridge
+    # Step 3: Run the bridge (uses config addresses)
     test_bridge_run()
 
-    # We've successfully completed all the individual test steps
-    logger.info("End-to-end integration test completed successfully")
-    assert True, "End-to-end test completed"
+    logger.info("End-to-end integration test steps completed.")
+    assert True, "End-to-end test steps completed"
 
 
 if __name__ == "__main__":
     # Run the tests manually
-    test_blockchain_connection()
-    test_config_update()
-    test_task_creation()
-    test_bridge_run()
-    test_e2e_integration()
-
-    # Report success
-    print("All tests completed successfully")
-    sys.exit(0)
+    logger.info("Running tests manually...")
+    if check_blockchain_connection():
+        task_idx = create_test_task()
+        if task_idx is not None:
+            run_bridge()
+        test_e2e_integration()  # Run pytest style assertions at the end
+        print("Manual test run completed.")
+        sys.exit(0)
+    else:
+        print("Manual test run failed due to blockchain connection issue.")
+        sys.exit(1)

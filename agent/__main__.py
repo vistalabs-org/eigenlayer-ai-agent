@@ -9,6 +9,7 @@ It connects the AI agent to the PredictionMarketHook contract.
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -23,6 +24,7 @@ from agent.oracle import Oracle, TaskStatus
 from agent.utils.config import load_config
 from agent.utils.logger import setup_logging
 from agent.utils.web3 import setup_web3
+from dotenv import load_dotenv
 
 
 class PredictionMarketBridge:
@@ -42,26 +44,28 @@ class PredictionMarketBridge:
             oracle_address: Override Oracle address from config
             market_address: Address of PredictionMarketHook contract
         """
-        # Load configuration
+        # Load NON-SENSITIVE configuration from JSON
         self.config = load_config(config_path)
 
         # Set up Web3 connection
         provider_uri = self.config.get("rpc_url", "http://localhost:8545")
         self.web3 = setup_web3(provider_uri)
 
-        # Get private key for transactions
-        self.private_key = self.config.get("private_key", None)
-        if not self.private_key:
+        # Load SENSITIVE keys from environment variables
+        self.agent_private_key = os.getenv("AGENT_PRIVATE_KEY")
+        self.api_key = os.getenv("API_KEY")
+
+        if not self.agent_private_key:
             logger.warning(
-                "No private key found in config. "
+                "PRIVATE_KEY environment variable not set. "
                 "Only read operations will be available."
             )
 
         # Set up account
-        if self.private_key:
-            # Remove '0x' prefix if present for web3.py
-            private_key_hex = self.private_key
-            if private_key_hex.startswith("0x"):
+        if self.agent_private_key:
+            
+            private_key_hex = self.agent_private_key
+            if self.agent_private_key.startswith("0x"):
                 private_key_hex = private_key_hex[2:]
             self.account = self.web3.eth.account.from_key(private_key_hex)
             logger.info(f"Using account: {self.account.address}")
@@ -71,7 +75,10 @@ class PredictionMarketBridge:
         # Set up Oracle client
         oracle_addr = oracle_address or self.config.get("oracle_address")
         if not oracle_addr:
-            raise ValueError("Oracle address not provided in config or command line")
+            raise ValueError(
+                "Oracle address not provided in config or command line, "
+                "and ORACLE_ADDRESS env var not set."
+            )
 
         self.oracle = Oracle(self.web3, oracle_addr, self.private_key)
         logger.info(f"Connected to Oracle at {oracle_addr}")
@@ -84,27 +91,36 @@ class PredictionMarketBridge:
                 "Some features will be limited."
             )
 
-        # Use agent address or account address
+        # Agent address: Prefer config, then derive from AGENT_PRIVATE_KEY
         agent_addr = self.config.get("agent_address")
-        if not agent_addr and self.account:
-            agent_addr = self.account.address
-            logger.info(f"Using account address as agent address: {agent_addr}")
-        elif not agent_addr:
-            raise ValueError(
-                "Agent address not provided in config and no account available"
-            )
+        if not agent_addr:
+            if self.agent_private_key:
+                key = self.agent_private_key.replace("0x", "")
+                agent_account = self.web3.eth.account.from_key(key)
+                agent_addr = agent_account.address
+                logger.info(
+                    f"Using address derived from AGENT_PRIVATE_KEY: {agent_addr}"
+                )
+            elif self.private_key:
+                agent_addr = self.account.address
+                logger.info(f"Using address derived from PRIVATE_KEY: {agent_addr}")
+            else:
+                error_msg = (
+                    "Agent address not in config, and cannot derive from env vars "
+                )
+                raise ValueError(error_msg)
 
         # Set up AI agent using OpenRouterBackend
         model = self.config.get("model", "google/gemma-3-27b-it:free")
-        api_key = self.config.get("api_key", None)
 
-        if not api_key:
+        if not self.api_key:
             logger.warning(
-                "No API key found in config. Using a mock response for testing."
+                "API_KEY environment variable not set. "
+                "Using a mock response for testing."
             )
             self.llm = None
         else:
-            self.llm = OpenRouterBackend(api_key=api_key, model=model)
+            self.llm = OpenRouterBackend(api_key=self.api_key, model=model)
             logger.info(f"Initialized LLM with model {model}")
 
         # Initialize AgentManager if registry address is provided
@@ -114,7 +130,7 @@ class PredictionMarketBridge:
                 oracle_address=oracle_addr,
                 registry_address=registry_addr,
                 agent_address=agent_addr,
-                private_key=self.private_key,
+                private_key=self.agent_private_key,
                 ai_backend=self.llm,
             )
         else:
@@ -628,6 +644,9 @@ def parse_args():
 
 
 def main():
+    # Load .env file first
+    load_dotenv()
+
     # Set up logging first thing
     setup_logging("DEBUG")  # Use DEBUG level for maximum verbosity
 

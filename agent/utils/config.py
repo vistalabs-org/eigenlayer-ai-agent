@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Load configuration from a file or default location
+    Load configuration from a JSON file or default location.
+    Environment variables should be loaded separately where needed.
 
     Args:
         config_path: Path to the configuration file
@@ -26,17 +27,20 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     logger.info(f"Loading configuration from {config_path}")
 
     if not config_path.exists():
-        logger.warning(f"Configuration file {config_path} not found")
+        logger.warning(
+            f"Configuration file {config_path} not found. "
+            f"Returning empty config."
+        )
         return {}
 
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
-        logger.debug("Configuration loaded successfully")
+        logger.debug(f"Configuration loaded successfully from {config_path}")
         return config
     except Exception as e:
-        logger.exception(f"Error loading configuration: {e}")
-        raise
+        logger.exception(f"Error loading configuration from {config_path}: {e}")
+        raise  # Re-raise exception after logging
 
 
 def create_directory_structure():

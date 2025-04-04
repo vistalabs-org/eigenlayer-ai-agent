@@ -6,9 +6,11 @@ deployed on a local Anvil instance.
 """
 
 import sys
+import os
 
 import pytest
 import web3
+from dotenv import load_dotenv
 
 # Import utility functions
 from .test_utils import (
@@ -17,6 +19,9 @@ from .test_utils import (
     get_web3_instance,
     load_config,
 )
+
+# Load environment variables from .env file
+load_dotenv()
 
 print(f"Using Web3.py version: {web3.__version__}")
 
@@ -38,7 +43,14 @@ class TestOracleContractTester:
         print(f"Chain ID: {self.web3.eth.chain_id}")
 
         # Default Anvil private key and account
-        self.private_key = get_default_private_key()
+        # Prioritize AGENT_PRIVATE_KEY from environment, then fallback
+        self.private_key = os.getenv("AGENT_PRIVATE_KEY")
+        if not self.private_key:
+            print("AGENT_PRIVATE_KEY not set, using default Anvil key.")
+            self.private_key = get_default_private_key()
+        else:
+            print("Using AGENT_PRIVATE_KEY from environment.")
+
         self.account = self.web3.eth.account.from_key(self.private_key)
         print(f"Using account: {self.account.address}")
 

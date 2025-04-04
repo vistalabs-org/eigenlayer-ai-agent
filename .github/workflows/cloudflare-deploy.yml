@@ -97,12 +97,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           # Check if KV namespace exists, create if not
-          NAMESPACE_ID=$(wrangler kv:namespace list | grep AGENT_STORAGE || echo "")
+          NAMESPACE_ID=$(wrangler kv namespace list | grep AGENT_STORAGE || echo "")
           if [ -z "$NAMESPACE_ID" ]; then
             echo "Creating new KV namespace"
-            wrangler kv:namespace create "AGENT_STORAGE"
+            wrangler kv namespace create "AGENT_STORAGE"
             # Store the namespace ID in an environment variable for later use
-            echo "KV_NAMESPACE_ID=$(wrangler kv:namespace list | grep AGENT_STORAGE | awk '{print $1}')" >> $GITHUB_ENV
+            echo "KV_NAMESPACE_ID=$(wrangler kv namespace list | grep AGENT_STORAGE | awk '{print $1}')" >> $GITHUB_ENV
           else
             # Extract the namespace ID from the existing namespace
             echo "KV_NAMESPACE_ID=$(echo $NAMESPACE_ID | awk '{print $1}')" >> $GITHUB_ENV

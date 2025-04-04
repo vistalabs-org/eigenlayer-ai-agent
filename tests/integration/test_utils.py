@@ -4,6 +4,7 @@ Common utility functions for integration tests.
 """
 
 import json
+import os
 from pathlib import Path
 
 from agent.oracle import Oracle
@@ -69,7 +70,9 @@ def get_web3_instance(provider_uri=None, config=None):
 def get_oracle_instance(web3, oracle_address=None, private_key=None, config=None):
     """
     Create an Oracle instance with the specified parameters.
-    If oracle_address or private_key are not specified, they're extracted from config.
+    If oracle_address is not specified, it's extracted from config.
+    Private key is loaded from AGENT_PRIVATE_KEY env var, falling back to
+    the default Anvil key if not set.
     If config is not specified, it's loaded using load_config().
     """
     if not config:
@@ -77,12 +80,20 @@ def get_oracle_instance(web3, oracle_address=None, private_key=None, config=None
 
     if not oracle_address:
         oracle_address = config.get("oracle_address")
+        if not oracle_address:
+            print("Oracle address not found in config.")
+            return None
 
-    if not private_key:
-        private_key = get_default_private_key()
+    # Prioritize AGENT_PRIVATE_KEY from environment, then fallback
+    loaded_private_key = os.getenv("AGENT_PRIVATE_KEY")
+    if not loaded_private_key:
+        print("AGENT_PRIVATE_KEY env var not set, using default Anvil key for testing.")
+        loaded_private_key = get_default_private_key()
+    else:
+        print("Using AGENT_PRIVATE_KEY from environment.")
 
     try:
-        return Oracle(web3, oracle_address, private_key)
+        return Oracle(web3, oracle_address, loaded_private_key)
     except Exception as e:
         print(f"Error creating Oracle instance: {e}")
         return None
