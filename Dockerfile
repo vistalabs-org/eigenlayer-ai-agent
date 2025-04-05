@@ -16,7 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    # Add poetry to PATH for subsequent commands in this RUN layer
+    export PATH="/root/.local/bin:$PATH" && \
     poetry config virtualenvs.create false
+
+# Add poetry to PATH for subsequent RUN layers and the final CMD
+ENV PATH="/root/.local/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
