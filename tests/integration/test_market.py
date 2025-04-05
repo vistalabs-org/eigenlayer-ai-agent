@@ -41,14 +41,12 @@ RPC_URL = CONFIG.get("rpc_url", "http://localhost:8545")
 ORACLE_ADDRESS = CONFIG.get("oracle_address")
 # Needed by AgentManager called within Bridge
 REGISTRY_ADDRESS = CONFIG.get("registry_address")
-Hook_ADDRESS = CONFIG.get("market_address")
 
 # Log the configuration being used
 logger.info("--- Test Market Configuration ---")
 logger.info(f"RPC URL: {RPC_URL}")
 logger.info(f"Oracle Address: {ORACLE_ADDRESS}")
 logger.info(f"Registry Address: {REGISTRY_ADDRESS}")
-logger.info(f"Hook Address: {Hook_ADDRESS}")
 logger.info("-------------------------------")
 
 # Check required configuration from loaded config
@@ -119,7 +117,6 @@ def run_bridge(run_once=True):
         bridge = PredictionMarketBridge(
             config_path=str(current_config_path),
             oracle_address=ORACLE_ADDRESS,
-            market_address=Hook_ADDRESS,
         )
 
         # Run the bridge

@@ -99,8 +99,7 @@ class Oracle:
                 logger.warning(f"Could not get optimal gas price: {e}")
                 gas_price = self.web3.eth.gas_price
 
-            # Get nonce
-            nonce = self.web3.eth.get_transaction_count(self.account.address)
+            nonce = self.web3.eth.get_transaction_count(self.account.address, "pending")
 
             # Try EIP-1559 transaction style
             try:
