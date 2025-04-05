@@ -10,13 +10,13 @@ import argparse
 import asyncio
 import json
 import os
+import re  # Import regex module
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 from loguru import logger
-from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from agent.llm import OpenRouterBackend
@@ -33,16 +33,12 @@ class PredictionMarketBridge:
     def __init__(
         self,
         config_path: str,
-        oracle_address: Optional[str] = None,
-        market_address: Optional[str] = None,
     ):
         """
         Initialize the bridge
 
         Args:
             config_path: Path to the configuration file
-            oracle_address: Override Oracle address from config
-            market_address: Address of PredictionMarketHook contract
         """
         # Load NON-SENSITIVE configuration from JSON
         self.config = load_config(config_path)
@@ -72,11 +68,11 @@ class PredictionMarketBridge:
         else:
             self.account = None
 
-        # Set up Oracle client
-        oracle_addr = oracle_address or self.config.get("oracle_address")
+        # Set up Oracle client - Load from config
+        oracle_addr = self.config.get("oracle_address")
         if not oracle_addr:
             raise ValueError(
-                "Oracle address not provided in config or command line, "
+                "Oracle address ('oracle_address') not found in config file, "
                 "and ORACLE_ADDRESS env var not set."
             )
 
@@ -87,7 +83,7 @@ class PredictionMarketBridge:
         registry_addr = self.config.get("registry_address")
         if not registry_addr:
             logger.warning(
-                "Registry address not provided in config. "
+                "Registry address ('registry_address') not provided in config. "
                 "Some features will be limited."
             )
 
@@ -103,7 +99,8 @@ class PredictionMarketBridge:
                 )
             else:
                 error_msg = (
-                    "Agent address not in config, and cannot derive from env vars "
+                    "Agent address ('agent_address') not in config, "
+                    "and cannot derive from env vars "
                 )
                 raise ValueError(error_msg)
 
@@ -133,9 +130,11 @@ class PredictionMarketBridge:
         else:
             self.agent_manager = None
 
-        # Set up PredictionMarketHook if address provided
+        # Set up PredictionMarketHook - Load address from config
         self.market_hook = None
-        if market_address:
+        effective_market_address = self.config.get("prediction_market_address")
+
+        if effective_market_address:
             # Load ABI for PredictionMarketHook
             try:
                 with open(
@@ -144,12 +143,27 @@ class PredictionMarketBridge:
                 ) as f:
                     hook_abi = json.load(f)
                 self.market_hook = self.web3.eth.contract(
-                    address=self.web3.to_checksum_address(market_address), abi=hook_abi
+                    address=self.web3.to_checksum_address(
+                        effective_market_address
+                    ),  # Use effective address
+                    abi=hook_abi,
                 )
-                logger.info(f"Connected to PredictionMarketHook at {market_address}")
+                logger.info(
+                    f"Connected to PredictionMarketHook at {effective_market_address}"
+                )
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 logger.warning(f"Could not load PredictionMarketHook ABI: {e}")
                 logger.warning("PredictionMarketHook integration will be limited")
+            except Exception as e:  # Catch potential address errors
+                logger.warning(
+                    f"Error connecting to PredictionMarketHook at "
+                    f"{effective_market_address}: {e}"
+                )
+        else:
+            logger.warning(
+                "PredictionMarketHook address ('prediction_market_address') "
+                "not found in config file. Market state checking will be disabled."
+            )
 
         # Cache for processed tasks
         self.processed_tasks = set()
@@ -254,13 +268,20 @@ class PredictionMarketBridge:
         try:
             # Get task data
             task = self.oracle.reconstruct_task(task_index)
-            logger.info(f"Processing task {task_index}: {task}")
+            # Task reconstruction might return None or raise error if task not found
+            if not task:
+                logger.warning(f"Could not reconstruct task {task_index}. Skipping.")
+                self.processed_tasks.add(task_index)  # Mark as processed
+                return
 
-            # Check if task is related to prediction markets
-            if not self.is_prediction_market_task(task):
-                logger.info(
-                    f"Task {task_index} is not related to prediction markets, skipping"
-                )
+            logger.info(
+                f"Checking if task {task_index} should be processed: "
+                f"{task.get('name')}"
+            )
+
+            # Check if task meets processing criteria (e.g., market state)
+            if not self.should_process_task(task):
+                # Reason for skipping is logged within should_process_task
                 self.processed_tasks.add(task_index)
                 return
 
@@ -284,18 +305,102 @@ class PredictionMarketBridge:
 
             traceback.print_exc()
 
-    def is_prediction_market_task(self, task: Dict[str, Any]) -> bool:
+    def should_process_task(self, task: Dict[str, Any]) -> bool:
         """
-        Check if a task is related to prediction markets
+        Check if a task should be processed.
+        Currently, it only processes tasks associated with markets
+        in the InResolution state (state 3).
 
         Args:
-            task: Task data
+            task: Task data dictionary (expecting 'name' field).
 
         Returns:
-            True if the task is for a prediction market
+            True if the task should be processed, False otherwise.
         """
-        # Process all tasks
-        return True
+        # 1. Check if we have the market hook contract available
+        if not self.market_hook:
+            logger.warning(
+                "Market hook contract not available. Cannot check market state. "
+                "Skipping task."
+            )
+            return False
+
+        task_name = task.get("name", "")
+        if not task_name:
+            logger.warning("Task has no name. Cannot extract market ID. Skipping task.")
+            return False
+
+        # 2. Extract Market ID (assuming format "<market_id>:<question_text>")
+        #    This part is fragile and depends heavily on how tasks are created.
+        #    A dedicated marketId field in the task data would be better.
+        market_id_match = re.match(r"([^:]+):(.*)", task_name)
+        if not market_id_match:
+            logger.warning(
+                f"Could not parse market ID from task name: '{task_name[:50]}...'. "
+                f"Expected format '<market_id>:<question_text>'. Skipping task."
+            )
+            return False
+
+        market_id = market_id_match.group(1).strip()
+        # question_text = market_id_match.group(2).strip()  # Not used here
+
+        if not market_id:
+            logger.warning(
+                f"Extracted market ID is empty from task name: '{task_name[:50]}...'. "
+                f"Skipping task."
+            )
+            return False
+
+        logger.debug(
+            f"Extracted Market ID '{market_id}' for Task '{task_name[:50]}...'"
+        )
+
+        # 3. Get Market State from the contract
+        try:
+            # Assuming the MarketState enum corresponds to uint8/int:
+            # Created=0, Active=1, Closed=2, InResolution=3, Resolved=4,
+            # Cancelled=5, Disputed=6
+            IN_RESOLUTION_STATE = 3
+
+            logger.debug(f"Querying state for market ID: {market_id}")
+            # Call getMarketById and extract the state from the returned struct (tuple)
+            market_data = self.market_hook.functions.getMarketById(market_id).call()
+            # Index 6 corresponds to the 'state' field in the Market struct based on ABI
+            current_state = market_data[6]
+
+            logger.info(
+                f"Market '{market_id}' state is: {current_state}. "
+                f"Required state for processing: {IN_RESOLUTION_STATE}"
+            )
+
+            # 4. Compare state
+            if current_state == IN_RESOLUTION_STATE:
+                logger.info(
+                    f"Market '{market_id}' is InResolution. "
+                    f"Task should be processed."
+                )
+                return True
+            else:
+                logger.info(
+                    f"Market '{market_id}' is not InResolution. " f"Skipping task."
+                )
+                return False
+
+        except ContractLogicError as e:
+            logger.error(
+                f"Contract logic error checking state for market '{market_id}': {e}. "
+                f"Skipping task."
+            )
+            return False
+        except Exception as e:
+            # Catch other potential errors like ABI mismatch, connection issues etc.
+            logger.error(
+                f"Failed to get state for market '{market_id}': {e}. " f"Skipping task."
+            )
+            import traceback
+
+            traceback.print_exc()
+            return False
 
     async def get_ai_response_async(self, task: Dict[str, Any]) -> str:
         """
@@ -310,6 +415,10 @@ class PredictionMarketBridge:
         # Use manager if available, otherwise use direct implementation
         if self.agent_manager:
             return self.agent_manager.get_ai_response(task)
+
+        # --- Direct Implementation (Fallback/Alternative) ---
+        # This part should ideally not be used if AgentManager is correctly set up
+        logger.warning("Using direct LLM call, AgentManager might not be configured.")
 
         task_content = task.get("name", "")
 
@@ -344,6 +453,7 @@ class PredictionMarketBridge:
             decision = "NO"
 
         return decision
+        # --- End Direct Implementation ---
 
     def get_optimal_gas_price(self):
         """Get optimal gas price based on recent blocks"""
@@ -371,136 +481,74 @@ class PredictionMarketBridge:
         self, task_index: int, task: Dict[str, Any], response: str
     ):
         """
-        Async version of submit_response
+        Async version of submit_response.
+        Ensures response is submitted via AgentManager if available.
 
         Args:
             task_index: Task index
             task: Task data
-            response: Response string
+            response: Response string ("YES" or "NO")
         """
         # If manager is available, let it handle response submission
         if self.agent_manager:
             self.agent_manager.submit_response(task_index, task, response)
             return
-
-        if not self.account:
-            raise ValueError("Cannot submit response without a private key")
-
-        # Create task struct to pass to respondToTask
-        task_struct = {
-            "name": task.get("name", ""),
-            "taskCreatedBlock": task.get("taskCreatedBlock", 0),
-        }
-
-        # Sign the response with more efficient approach
-        message = f"Task {task_index} response: {response[:10]}"  # Limit message size
-        signature_hash = self.web3.keccak(text=message)
-
-        try:
-            # Use encode_defunct from eth_account.messages if available
-            from eth_account.messages import encode_defunct
-
-            signable_message = encode_defunct(hexstr=signature_hash.hex())
-            signature = self.web3.eth.account.sign_message(
-                signable_message, private_key=self.agent_private_key
-            ).signature
-        except ImportError:
-            # Fallback for older web3.py versions
-            signature = self.web3.eth.account.sign_message(
-                Web3.to_bytes(hexstr=signature_hash.hex()),
-                private_key=self.agent_private_key,
-            ).signature
-
-        # Submit to blockchain
-        try:
-            nonce = self.web3.eth.get_transaction_count(self.account.address)
-
-            # Try to get optimal gas price
-            try:
-                gas_price = self.get_optimal_gas_price()
-            except Exception as e:
-                logger.warning(f"Could not get optimal gas price: {e}")
-                gas_price = self.web3.eth.gas_price
-
-            # Try EIP-1559 transaction style
-            try:
-                # Get base fee from latest block
-                latest_block = self.web3.eth.get_block("latest")
-                base_fee = latest_block.baseFeePerGas
-                max_priority_fee = self.web3.to_wei(1, "gwei")
-                max_fee_per_gas = int(base_fee * 1.5) + max_priority_fee
-
-                # Estimate gas with buffer
-                estimated_gas = self.oracle.contract.functions.respondToTask(
-                    task_struct, task_index, signature
-                ).estimate_gas({"from": self.account.address})
-                gas_limit = int(estimated_gas * 1.2)  # 20% buffer
-
-                # Build EIP-1559 transaction
-                tx = self.oracle.contract.functions.respondToTask(
-                    task_struct, task_index, signature
-                ).build_transaction(
-                    {
-                        "from": self.account.address,
-                        "nonce": nonce,
-                        "gas": gas_limit,
-                        "maxFeePerGas": max_fee_per_gas,
-                        "maxPriorityFeePerGas": max_priority_fee,
-                        "type": 2,  # EIP-1559 transaction
-                    }
-                )
-            except Exception as e:
-                # Fallback to legacy transaction type
-                logger.warning(
-                    f"Could not create EIP-1559 transaction: {e},"
-                    " falling back to legacy"
-                )
-
-                # Estimate gas with buffer
-                try:
-                    estimated_gas = self.oracle.contract.functions.respondToTask(
-                        task_struct, task_index, signature
-                    ).estimate_gas({"from": self.account.address})
-                    gas_limit = int(estimated_gas * 1.2)  # 20% buffer
-                except Exception as e_gas:
-                    logger.warning(
-                        f"Gas estimation failed: {e_gas}, using safe default"
-                    )
-                    gas_limit = 300000  # Reduced from 500000
-
-                # Build legacy transaction
-                tx = self.oracle.contract.functions.respondToTask(
-                    task_struct, task_index, signature
-                ).build_transaction(
-                    {
-                        "from": self.account.address,
-                        "nonce": nonce,
-                        "gas": gas_limit,
-                        "gasPrice": gas_price,
-                    }
-                )
-
-            # Sign and send
-            signed_tx = self.web3.eth.account.sign_transaction(
-                tx, self.agent_private_key
+        else:
+            # This case should not happen if registry_address is in config
+            logger.error(
+                "AgentManager not initialized. Cannot submit response via "
+                "AIAgent contract. Configure 'registry_address' in config.json."
             )
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            # Optionally, raise an error or just log and return
+            # raise ValueError("AgentManager not available for response submission")
+            return
 
-            # Wait for receipt
-            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        # --- Removed Direct Submission Logic ---
+        # The following logic directly called the Oracle and bypassed the AIAgent,
+        # which is incorrect for the intended flow.
 
-            if receipt["status"] == 1:
-                logger.info(f"Response submitted successfully: {tx_hash.hex()}")
-            else:
-                logger.error(f"Response submission failed: {receipt}")
-
-        except Exception as e:
-            logger.error(f"Error submitting response: {e}")
-            raise
+        # if not self.account:
+        #     raise ValueError("Cannot submit response without a private key")
+        #
+        # # Create task struct to pass to respondToTask
+        # task_struct = {
+        #     "name": task.get("name", ""),
+        #     "taskCreatedBlock": task.get("taskCreatedBlock", 0),
+        # }
+        #
+        # # Sign the response - THIS IS NOT THE SIGNATURE THE CONTRACT EXPECTS
+        # # The contract expects the signature to *be* the response data
+        # # for the AgentManager flow. Direct signing here is misleading.
+        # message = f"Task {task_index} response: {response[:10]}" # Limit message size
+        # signature_hash = self.web3.keccak(text=message)
+        #
+        # try:
+        #     # Use encode_defunct from eth_account.messages if available
+        #     from eth_account.messages import encode_defunct
+        #     signable_message = encode_defunct(hexstr=signature_hash.hex())
+        #     signature = self.web3.eth.account.sign_message(
+        #         signable_message, private_key=self.agent_private_key
+        #     ).signature
+        # except ImportError:
+        #     # Fallback for older web3.py versions
+        #     signature = self.web3.eth.account.sign_message(
+        #         Web3.to_bytes(hexstr=signature_hash.hex()),
+        #         private_key=self.agent_private_key,
+        #     ).signature
+        #
+        # # Submit to blockchain DIRECTLY TO ORACLE - INCORRECT PATH
+        # try:
+        #     nonce = self.web3.eth.get_transaction_count(self.account.address)
+        #     # ... [Rest of direct transaction building logic removed] ...
+        #
+        # except Exception as e:
+        #     logger.error(f"Error submitting response directly: {e}") # Log context
+        #     raise
+        # --- End Removed Direct Submission Logic ---
 
     async def resolve_market_async(self, market_id: str, decision: bool):
         """
-        Async version of resolve_market
+        Async version of resolve_market (kept for potential direct use/testing)
 
         Args:
             market_id: ID of the market to resolve
@@ -634,14 +682,6 @@ def parse_args():
         "--run-once", action="store_true", help="Run the script once and exit"
     )
 
-    parser.add_argument(
-        "--oracle-address", type=str, help="Override Oracle address from config"
-    )
-
-    parser.add_argument(
-        "--market-address", type=str, help="Address of PredictionMarketHook contract"
-    )
-
     return parser.parse_args()
 
 
@@ -653,17 +693,14 @@ def main():
     setup_logging("DEBUG")  # Use DEBUG level for maximum verbosity
 
     try:
-        # Parse command line arguments
+        # Parse command line arguments (only --config, --interval, --run-once remain)
         args = parse_args()
 
         logger.info("Starting EigenLayer AI Agent")
 
-        # Create the bridge using the parsed arguments
-        bridge = PredictionMarketBridge(
-            config_path=args.config,
-            oracle_address=args.oracle_address,
-            market_address=args.market_address,
-        )
+        # Create the bridge using only the config path
+        # The constructor now handles loading addresses from the config
+        bridge = PredictionMarketBridge(config_path=args.config)
 
         # Run the main processing loop
         bridge.run(interval=args.interval, run_once=args.run_once)

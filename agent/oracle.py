@@ -191,186 +191,52 @@ class Oracle:
         """Get the hash of a task"""
         return self.contract.functions.allTaskHashes(task_index).call()
 
-    def reconstruct_task(self, task_index: int) -> Dict[str, Any]:
+    def reconstruct_task(self, task_index: int) -> Optional[Dict[str, Any]]:
         """
-        Reconstructs a task from blockchain data
+        Reconstructs a task from blockchain data by calling the getTask function.
 
         Args:
             task_index: Index of the task to reconstruct
 
         Returns:
-            Dictionary with task data
+            Dictionary with task data ('name', 'taskCreatedBlock')
+            or None if not found/error.
         """
+        logger.debug(f"Attempting to reconstruct task {task_index} via getTask().")
+
         try:
-            if hasattr(self.contract.functions, "tasks"):
-                try:
-                    task_data = self.contract.functions.tasks(task_index).call()
-                    logger.info(f"Retrieved task using tasks(): {task_data}")
-                    return self._parse_task_data(task_data)
-                except Exception as e:
-                    logger.warning(f"Could not get task using tasks(): {e}")
+            # Call the getTask function directly
+            # The function returns a tuple: (name, taskCreatedBlock)
+            task_data = self.contract.functions.getTask(task_index).call()
 
-            # SECOND APPROACH: Try to get the task description directly
-            try:
-                # Direct access to task descriptions (try all possible function names)
-                for func_name in [
-                    "taskDescriptions",
-                    "taskDescription",
-                    "getTaskDescription",
-                ]:
-                    if hasattr(self.contract.functions, func_name):
-                        try:
-                            description = getattr(self.contract.functions, func_name)(
-                                task_index
-                            ).call()
-                            logger.info(
-                                f"Retrieved task description using {func_name}: "
-                                f"{description}"
-                            )
-                            return {
-                                "name": description,
-                                "taskCreatedBlock": self.web3.eth.block_number,
-                            }
-                        except Exception as e:
-                            logger.warning(
-                                f"Could not get task description using {func_name}: {e}"
-                            )
-            except Exception as e:
-                logger.warning(f"Failed to get task description: {e}")
-
-            # THIRD APPROACH: Try to access the Task struct directly
-            try:
-                # Check if there's a function to view a task
-                for view_func in ["viewTask", "getTask"]:
-                    if hasattr(self.contract.functions, view_func):
-                        try:
-                            task_struct = getattr(self.contract.functions, view_func)(
-                                task_index
-                            ).call()
-                            logger.info(
-                                f"Retrieved task using {view_func}: {task_struct}"
-                            )
-                            return self._parse_task_data(task_struct)
-                        except Exception as e:
-                            logger.warning(f"Could not get task using {view_func}: {e}")
-            except Exception as e:
-                logger.warning(f"Failed to access task struct: {e}")
-
-            # FOURTH APPROACH: Try to get past events but with proper web3.py format
-            try:
-                for event_name in ["NewTaskCreated", "TaskCreated"]:
-                    if hasattr(self.contract.events, event_name):
-                        try:
-                            # Create filter object first
-                            event_filter = getattr(
-                                self.contract.events, event_name
-                            ).create_filter(fromBlock=0, toBlock="latest")
-                            # Get all entries from filter
-                            entries = event_filter.get_all_entries()
-                            logger.info(f"Found {len(entries)} events for {event_name}")
-
-                            # Parse entries to find our task
-                            for entry in entries:
-                                args = entry["args"]
-                                logger.debug(f"Event args: {args}")
-
-                                task_num = None
-                                task_desc = None
-
-                                # Look for fields by common names
-                                for field, value in args.items():
-                                    field_lower = field.lower()
-                                    if "task" in field_lower and (
-                                        "num" in field_lower
-                                        or "index" in field_lower
-                                        or "id" in field_lower
-                                    ):
-                                        task_num = value
-                                    elif (
-                                        "desc" in field_lower
-                                        or "question" in field_lower
-                                        or "title" in field_lower
-                                    ):
-                                        task_desc = value
-
-                                # If we found our task
-                                if task_num is not None and task_num == task_index:
-                                    logger.info(
-                                        f"Found task {task_index} in event: {task_desc}"
-                                    )
-                                    return {
-                                        "name": task_desc
-                                        or f"Task from {event_name} "
-                                        "event #{task_index}",
-                                        "taskCreatedBlock": entry["blockNumber"],
-                                    }
-                        except Exception as e:
-                            logger.warning(
-                                f"Error getting events for {event_name}: {e}"
-                            )
-            except Exception as e:
-                logger.warning(f"Failed to get task from events: {e}")
-
-            # FIFTH APPROACH: Read raw storage from the contract - last resort
-            try:
-                # If task index is in valid range, try to read raw contract state
-                if task_index < self.contract.functions.latestTaskNum().call():
-                    # For AIOracleServiceManager from test contract
-                    if hasattr(self.contract.functions, "createNewTask"):
-                        # Look for the prediction market question in the test contract
-                        # This is based on PredictionMarketAITest.t.sol contract
-                        market_title = "Will AI replace developers by 2030?"
-                        task_desc = f"Prediction market question: {market_title}."
-                        " Please respond with YES or NO."
-
-                        logger.info(
-                            "Using hardcoded test market question "
-                            f"for task {task_index}"
-                        )
-                        return {
-                            "name": task_desc,
-                            "taskCreatedBlock": 0,
-                        }
-
-                # Debugging available contract calls
-                functions = [
-                    fn for fn in dir(self.contract.functions) if not fn.startswith("_")
-                ]
-                logger.debug(f"Available contract functions: {functions}")
-
-                # Try some common patterns in Oracle contracts
-                if hasattr(self.contract.functions, "allTaskHashes"):
-                    task_hash = self.contract.functions.allTaskHashes(task_index).call()
-                    return {
-                        "name": f"Task with hash: {task_hash.hex()}",
-                        "taskCreatedBlock": 0,
-                    }
-            except Exception as e:
-                logger.warning(f"Failed in last resort approach: {e}")
+            # Check if data was returned
+            if task_data and len(task_data) == 2 and task_data[1] > 0:
+                task_name = task_data[0]
+                task_created_block = task_data[1]
+                logger.info(f"Reconstructed task {task_index} via getTask():")
+                logger.info(f"  Name: '{task_name}'")
+                logger.info(f"  Block: {task_created_block}")
+                return {
+                    "name": task_name,
+                    "taskCreatedBlock": task_created_block,
+                }
+            else:
+                # This case might happen if the task index is invalid
+                # or getTask returns unexpected data
+                logger.warning(
+                    f"getTask({task_index}) returned unexpected data"
+                    " or task doesn't exist."
+                )
+                logger.warning(f"  Data received: {task_data}")
+                return None
 
         except Exception as e:
-            logger.error(f"Error reconstructing task: {e}")
+            # Catch potential errors like ContractLogicError (if task doesn't exist),
+            # ABI mismatch, connection issues etc.
+            logger.error(f"Error calling getTask({task_index}) on contract.")
+            logger.error(f"  Error details: {e}")
+            logger.error("Is the contract deployed with getTask and ABI updated?")
+            import traceback
 
-        # FALLBACK WITH HARDCODED DATA - Based on PredictionMarketAITest.t.sol
-        # This is specifically tailored for the test environment
-        if task_index == 0:
-            market_title = "Will AI replace developers by 2030?"
-            task_desc = f"Prediction market question: {market_title}."
-            " Please respond with YES or NO."
-            logger.warning(
-                f"Using hardcoded market question for task {task_index}: {task_desc}"
-            )
-            return {
-                "name": task_desc,
-                "taskCreatedBlock": 0,
-            }
-        else:
-            placeholder = {
-                "name": "Prediction market question: Will the Bitcoin price"
-                " exceed $100,000 by the end of 2025? Please respond with YES or NO.",
-                "taskCreatedBlock": 0,
-            }
-            logger.warning(
-                f"Using fallback market question for task {task_index}: {placeholder}"
-            )
-            return placeholder
+            traceback.print_exc()  # Log the full traceback for debugging
+            return None  # Indicate failure
