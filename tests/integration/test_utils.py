@@ -39,7 +39,6 @@ def load_config(config_path=None):
         "registry_address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
         "agent_address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
         "usdc_address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-        "prediction_market_address": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
     }
 
 

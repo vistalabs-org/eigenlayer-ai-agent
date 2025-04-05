@@ -1,9 +1,7 @@
 {
   "rpc_url": "https://unichain-sepolia.drpc.org",
-  "oracle_address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  "oracle_address": "0x6fa8Db81A8afAb6aE3D206E5Dbe18739F72F69D6",
   "agent_address": "0x27a3fE3Eb6c77a836dedb958f155C088b548adB4",
-  "registry_address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-  "chain_id": 1301,
-  "poll_interval_seconds": 30,
-  "market_address": "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+  "registry_address": "0x82013345325952E66a896623c3D3ddDEd202977D",
+  "market_address": "0x74D7669e23e5035D8Bea3bDe2ea21C131E984880"
 }
