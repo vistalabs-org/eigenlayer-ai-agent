@@ -92,12 +92,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_NAME: eigenlayer-ai-agent-worker
         run: |
-          # Deploy the worker script - Remove --secret flags
           wrangler deploy worker.js \
             --name $WORKER_NAME \
             --compatibility-date 2023-10-30 \
             --compatibility-flag nodejs_compat \
-            --triggers cron="*/5 * * * *" \
+            --schedule "*/5 * * * *" \
             --var KV_NAMESPACE_ID=${{ env.KV_NAMESPACE_ID }}
 
   deploy-container:
