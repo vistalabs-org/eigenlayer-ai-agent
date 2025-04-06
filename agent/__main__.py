@@ -155,7 +155,7 @@ class PredictionMarketBridge:
                 logger.warning("PredictionMarketHook integration will be limited")
             except Exception as e:  # Catch potential address errors
                 logger.warning(
-                    f"Error connecting to PredictionMarketHook at "
+                    "Error connecting to PredictionMarketHook at "
                     f"{effective_market_address}: {e}"
                 )
         else:
@@ -248,11 +248,13 @@ class PredictionMarketBridge:
                 except Exception as e:
                     logger.error(f"Error processing task {task_index}: {e}")
                     import traceback
+
                     traceback.print_exc()
 
         except Exception as e:
             logger.error(f"Error checking pending tasks: {e}")
             import traceback
+
             traceback.print_exc()
 
     async def process_task_async(self, task_index: int):
@@ -299,6 +301,7 @@ class PredictionMarketBridge:
         except Exception as e:
             logger.error(f"Error processing task {task_index}: {e}")
             import traceback
+
             traceback.print_exc()
 
     def should_process_task(self, task_index: int, task: Dict[str, Any]) -> bool:
@@ -323,19 +326,26 @@ class PredictionMarketBridge:
             return False
 
         # 2. Get the Market ID directly from the Oracle Manager contract
-        market_id_bytes = b'\x00'*32
+        market_id_bytes = b"\x00" * 32
         try:
             # Call Oracle contract to get the linked Market ID for this task
-            market_id_bytes = self.oracle.contract.functions.getMarketIdForTask(task_index).call() # noqa: E501
-            if market_id_bytes == b'\x00'*32:
-                 # Task is not linked to a market ID (or oracle call failed implicitly)
-                 logger.warning(f"Task {task_index} is not linked to a market ID in the Oracle. Skipping.") # noqa: E501
-                 return False
+            market_id_bytes = self.oracle.contract.functions.getMarketIdForTask(
+                task_index
+            ).call()
+            if market_id_bytes == b"\x00" * 32:
+                # Task is not linked to a market ID (or oracle call failed implicitly)
+                logger.warning(
+                    f"Task {task_index} is not linked to a market ID in the Oracle."
+                )
+                return False
             # Convert bytes32 to hex string for logging
             market_id_hex = "0x" + market_id_bytes.hex()
-            logger.debug(f"Retrieved Market ID {market_id_hex} for Task {task_index} from Oracle.") # noqa: E501
+            logger.debug(f"Retrieved Market ID {market_id_hex} for Task {task_index}.")
         except Exception as e:
-            logger.error(f"Failed to get Market ID for task {task_index} from oracle contract: {e}. Skipping.") # noqa: E501
+            logger.error(
+                f"Failed to get Market ID for task {task_index} from oracle"
+                f" contract: {e}. Skipping."
+            )
             return False
 
         # 3. Get Market State from the contract using the correct market_id
@@ -347,8 +357,11 @@ class PredictionMarketBridge:
 
             logger.debug(f"Querying state for market ID: {market_id_hex}")
             # Call getMarketById using the bytes32 market ID from the oracle
-            market_data = self.market_hook.functions.getMarketById(market_id_bytes).call() # noqa: E501
-            # Index 6 corresponds to the 'state' field in the Market struct based on ABI # noqa: E501
+            market_data = self.market_hook.functions.getMarketById(
+                market_id_bytes
+            ).call()
+            # Index 6 corresponds to the 'state' field
+            # in the Market struct based on ABI
             current_state = market_data[6]
 
             logger.info(
@@ -360,27 +373,29 @@ class PredictionMarketBridge:
             if current_state == IN_RESOLUTION_STATE:
                 logger.info(
                     f"Market {market_id_hex} is InResolution. "
-                    f"Task should be processed."
+                    "Task should be processed."
                 )
                 return True
             else:
                 logger.info(
-                    f"Market {market_id_hex} is not InResolution. " f"Skipping task." # noqa: E501
+                    f"Market {market_id_hex} is not InResolution. " "Skipping task."
                 )
                 return False
 
         except ContractLogicError as e:
             logger.error(
-                f"Contract logic error checking state for market {market_id_hex}: {e}. " # noqa: E501
-                f"Skipping task."
+                f"Contract logic error checking state for market {market_id_hex}: {e}."
+                " Skipping task."
             )
             return False
         except Exception as e:
-            # Catch other potential errors like ABI mismatch, connection issues etc. # noqa: E501
+            # Catch other potential errors like ABI mismatch, connection issues etc.
             logger.error(
-                f"Failed to get state for market {market_id_hex}: {e}. " f"Skipping task." # noqa: E501
+                f"Failed to get state for market {market_id_hex}: {e}. "
+                "Skipping task."
             )
             import traceback
+
             traceback.print_exc()
             return False
 

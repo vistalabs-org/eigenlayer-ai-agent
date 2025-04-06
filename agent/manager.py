@@ -1,7 +1,7 @@
 import asyncio
+import json
 from enum import IntEnum
 from typing import Any, Dict
-import json
 
 from loguru import logger
 from web3 import Web3
@@ -236,39 +236,63 @@ class AgentManager:
                 # Attempt to parse the JSON response
                 try:
                     # Find the JSON block in case the LLM adds extra text
-                    json_start = full_response_str.find('{')
-                    json_end = full_response_str.rfind('}')
+                    json_start = full_response_str.find("{")
+                    json_end = full_response_str.rfind("}")
                     if json_start != -1 and json_end != -1 and json_end > json_start:
-                        json_str = full_response_str[json_start:json_end+1]
+                        json_str = full_response_str[json_start : json_end + 1]
                         parsed_response = json.loads(json_str)
 
                         # Validate the parsed JSON
                         is_dict = isinstance(parsed_response, dict)
-                        has_decision = 'decision' in parsed_response
+                        has_decision = "decision" in parsed_response
                         if is_dict and has_decision:
-                            extracted_decision = parsed_response['decision'].strip().upper()
+                            extracted_decision = (
+                                parsed_response["decision"].strip().upper()
+                            )
                             if extracted_decision in ["YES", "NO"]:
                                 decision = extracted_decision
                                 explanation = parsed_response.get(
-                                    'explanation', '(No explanation provided)'
+                                    "explanation", "(No explanation provided)"
                                 )
-                                log_info_msg = f"Parsed AI Decision: {decision}, Explanation: {explanation}"
+                                log_info_msg = (
+                                    f"Parsed AI Decision: {decision}, "
+                                    f"Explanation: {explanation}"
+                                )
                                 logger.info(log_info_msg)
                             else:
-                                log_msg = f"Parsed JSON 'decision' has invalid value: {parsed_response['decision']}. Defaulting to NO."
+                                log_msg = (
+                                    "Parsed JSON 'decision' has invalid value: "
+                                    f"{parsed_response['decision']}. "
+                                    "Defaulting to NO."
+                                )
                                 logger.warning(log_msg)
                         else:
-                            log_msg = f"Parsed JSON is not a dictionary or missing 'decision' key: {parsed_response}. Defaulting to NO."
+                            log_msg = (
+                                "Parsed JSON is not a dictionary or missing "
+                                "'decision' key: {parsed_response}. "
+                                "Defaulting to NO."
+                            )
                             logger.warning(log_msg)
                     else:
-                        log_msg = f"Could not find valid JSON block in response: {full_response_str}. Defaulting to NO."
+                        log_msg = (
+                            "Could not find valid JSON block in response: "
+                            f"{full_response_str}. Defaulting to NO."
+                        )
                         logger.warning(log_msg)
 
                 except json.JSONDecodeError as e:
-                    log_msg = f"Failed to decode JSON from AI response: {e}. Raw response: {full_response_str}. Defaulting to NO."
+                    log_msg = (
+                        "Failed to decode JSON from AI response: "
+                        f"{e}. Raw response: {full_response_str}. "
+                        "Defaulting to NO."
+                    )
                     logger.warning(log_msg)
                 except Exception as e:
-                    log_msg = f"Unexpected error parsing AI response JSON: {e}. Raw response: {full_response_str}. Defaulting to NO."
+                    log_msg = (
+                        "Unexpected error parsing AI response JSON: "
+                        f"{e}. Raw response: {full_response_str}. "
+                        "Defaulting to NO."
+                    )
                     logger.error(log_msg)
 
             except Exception as e:
@@ -276,11 +300,12 @@ class AgentManager:
 
         else:
             # Mock response for testing when no API key or backend configured
-            logger.info("Using mock response (AI backend not configured). Setting decision to YES for test.")
-            decision = "YES" # Use YES for mock to test the change
-            # In a real scenario without AI, defaulting to NO might be safer.
+            logger.info("AI backend not configured. Using mock response.")
+            decision = "Error: AI backend not configured"
 
-        final_log_msg = f"Final decision for task {task.get('name', '')[:50]}...: {decision}"
+        final_log_msg = (
+            f"Final decision for task {task.get('name', '')[:50]}...: {decision}"
+        )
         logger.info(final_log_msg)
         return decision
 
@@ -312,9 +337,7 @@ class AgentManager:
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
             if receipt["status"] == 1:
-                logger.info(
-                    f"Response submitted successfully via AIAgent: {tx_hash}"
-                )
+                logger.info(f"Response submitted successfully via AIAgent: {tx_hash}")
             else:
                 logger.error(f"Response submission via AIAgent failed: {receipt}")
         except Exception as e:

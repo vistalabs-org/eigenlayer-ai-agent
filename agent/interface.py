@@ -39,9 +39,7 @@ class AgentInterface:
             self.account = self.web3.eth.account.from_key(private_key_hex)
             logger.info(f"Using account: {self.account.address}")
         else:
-            logger.warning(
-                "No private key provided. Only read ops available."
-            )
+            logger.warning("No private key provided. Only read ops available.")
 
     def get_status(self):
         """Get the status of the agent from the contract"""
@@ -59,9 +57,7 @@ class AgentInterface:
             Transaction hash string
         """
         if not self.account:
-            raise ValueError(
-                "Private key not provided, cannot send transactions"
-            )
+            raise ValueError("Private key not provided, cannot send transactions")
 
         logger.info(f"Processing task {task_index} with decision {decision}")
         gas_price = self.web3.to_wei(1, "gwei")
@@ -71,9 +67,7 @@ class AgentInterface:
         ).build_transaction(
             {
                 "from": self.account.address,
-                "nonce": self.web3.eth.get_transaction_count(
-                    self.account.address
-                 ),
+                "nonce": self.web3.eth.get_transaction_count(self.account.address),
                 "gas": 5000000,  # Increased gas limit
                 "gasPrice": gas_price,
             }
@@ -81,9 +75,7 @@ class AgentInterface:
 
         logger.info(f"Transaction details: {tx_build}")
 
-        signed_tx = self.web3.eth.account.sign_transaction(
-            tx_build, self.private_key
-        )
+        signed_tx = self.web3.eth.account.sign_transaction(tx_build, self.private_key)
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
         return tx_hash.hex()
