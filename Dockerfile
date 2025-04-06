@@ -26,14 +26,9 @@ ENV PATH="/root/.local/bin:$PATH"
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY pyproject.toml poetry.lock ./
-
-# Install dependencies
-RUN poetry install --no-dev --no-interaction
-
-# Copy the rest of the application
 COPY . .
+
+RUN poetry install --only main --no-interaction
 
 # Create a non-root user to run the agent
 RUN useradd -m agent
@@ -43,4 +38,4 @@ USER agent
 CMD ["python", "-m", "agent", "--config", "config.json"]
 
 # Add label for the Cloudflare Workers
-LABEL com.cloudflare.w.name="eigenlayer-ai-agent" 
+LABEL com.cloudflare.w.name="eigenlayer-ai-agent"
