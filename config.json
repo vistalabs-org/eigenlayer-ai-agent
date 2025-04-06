@@ -1,7 +1,8 @@
 {
-  "rpc_url": "https://unichain-sepolia.drpc.org",
-  "oracle_address": "0x0e8eD93C7e134722d34bC4344B9DCECd144f0197",
-  "agent_address": "0x518295ddBF4A0c7953677BbF3d40c2Bf4FAbC62e",
-  "registry_address": "0x744E674901428fc0169C69c5717001e6DA9DA85E",
-  "prediction_market_address": "0xEc3aA97150992e6a540b707E6C45dd9945AeC880"
+  "rpc_url": "https://unichain-sepolia.g.alchemy.com/v2/DsxfwMm8saN57WQs6s7trk5TPYxVAEtQ",
+  "oracle_address": "0x392080073a7De157b9A3EA2de1E2a00016273cBA",
+  "agent_address": "0x02B78E1c7e61afa62613f3c9d8De2C81ab551637",
+  "registry_address": "0xe8622FA7282f8824c1CE37B27c2f844828b5D60e",
+  "prediction_market_address": "0x70FC0B47F1773F072dECd26497531D6511a98880",
+  "model": "meta-llama/llama-4-scout"
 }

@@ -1,8 +1,8 @@
 import asyncio
 from enum import IntEnum
 from typing import Any, Dict
+import json
 
-from eth_account.messages import encode_defunct
 from loguru import logger
 from web3 import Web3
 
@@ -74,7 +74,6 @@ class AgentManager:
         self.agent = AgentInterface(web3, agent_address, private_key)
 
     async def setup(self):
-        # TODO: Add a check to see if the agent is already registered
         """Setup the agent - register if needed"""
         if not self.is_registered:
             logger.info(f"Checking agent registration: {self.agent_address}")
@@ -200,89 +199,122 @@ class AgentManager:
 
     def get_ai_response(self, task: Dict[str, Any]) -> str:
         """
-        Use AI agent to generate a response
+        Use AI agent to generate a response in JSON format and parse it.
 
         Args:
             task: Task data
 
         Returns:
-            Response string (YES or NO)
+            Response string ("YES" or "NO")
         """
         task_content = task.get("name", "")
 
         prompt = f"""
         You are evaluating a prediction market question.
-        Your task is to respond with either YES or NO,
-        followed by a brief explanation of your reasoning.
+        Your task is to respond with a JSON object containing two keys:
+        1. "decision": Must be either "YES" or "NO" (uppercase).
+        2. "explanation": A brief explanation of your reasoning.
 
         Question: {task_content}
 
-        Response format: Start with YES or NO (capitalized),
-        followed by your explanation.
+        Respond ONLY with the JSON object, nothing else.
+        Example JSON response:
+        {{
+          "decision": "YES",
+          "explanation": "Based on current market trends and analyst projections."
+        }}
         """
 
-        # Call AI agent if available or return mock response for testing
+        decision = "NO"  # Default decision if parsing fails
+
+        # Call AI agent if available or use mock response for testing
         if self.ai_backend:
-            full_response = self.ai_backend.generate_response(prompt)
-            logger.info(f"AI response: {full_response}")
-        else:
-            # Mock response for testing when no API key is available
-            logger.info("Using mock response (no API key provided)")
-            full_response = (
-                "YES, based on current market trends and analyst projections."
-            )
+            try:
+                full_response_str = self.ai_backend.generate_response(prompt)
+                logger.info(f"Raw AI response string: {full_response_str}")
 
-        # Extract YES/NO from response - improved parsing
-        response_upper = full_response.strip().upper()
+                # Attempt to parse the JSON response
+                try:
+                    # Find the JSON block in case the LLM adds extra text
+                    json_start = full_response_str.find('{')
+                    json_end = full_response_str.rfind('}')
+                    if json_start != -1 and json_end != -1 and json_end > json_start:
+                        json_str = full_response_str[json_start:json_end+1]
+                        parsed_response = json.loads(json_str)
 
-        if response_upper.startswith("NO"):
-            return "NO"
-        elif response_upper.startswith("YES"):
-            return "YES"
+                        # Validate the parsed JSON
+                        is_dict = isinstance(parsed_response, dict)
+                        has_decision = 'decision' in parsed_response
+                        if is_dict and has_decision:
+                            extracted_decision = parsed_response['decision'].strip().upper()
+                            if extracted_decision in ["YES", "NO"]:
+                                decision = extracted_decision
+                                explanation = parsed_response.get(
+                                    'explanation', '(No explanation provided)'
+                                )
+                                log_info_msg = f"Parsed AI Decision: {decision}, Explanation: {explanation}"
+                                logger.info(log_info_msg)
+                            else:
+                                log_msg = f"Parsed JSON 'decision' has invalid value: {parsed_response['decision']}. Defaulting to NO."
+                                logger.warning(log_msg)
+                        else:
+                            log_msg = f"Parsed JSON is not a dictionary or missing 'decision' key: {parsed_response}. Defaulting to NO."
+                            logger.warning(log_msg)
+                    else:
+                        log_msg = f"Could not find valid JSON block in response: {full_response_str}. Defaulting to NO."
+                        logger.warning(log_msg)
+
+                except json.JSONDecodeError as e:
+                    log_msg = f"Failed to decode JSON from AI response: {e}. Raw response: {full_response_str}. Defaulting to NO."
+                    logger.warning(log_msg)
+                except Exception as e:
+                    log_msg = f"Unexpected error parsing AI response JSON: {e}. Raw response: {full_response_str}. Defaulting to NO."
+                    logger.error(log_msg)
+
+            except Exception as e:
+                logger.error(f"Error calling AI backend: {e}. Defaulting to NO.")
+
         else:
-            # Default to NO if unclear, but log the issue
-            logger.warning(
-                "Could not clearly extract YES/NO from response,"
-                " defaulting to NO. Response: {full_response[:100]}..."
-            )
-            return "NO"
+            # Mock response for testing when no API key or backend configured
+            logger.info("Using mock response (AI backend not configured). Setting decision to YES for test.")
+            decision = "YES" # Use YES for mock to test the change
+            # In a real scenario without AI, defaulting to NO might be safer.
+
+        final_log_msg = f"Final decision for task {task.get('name', '')[:50]}...: {decision}"
+        logger.info(final_log_msg)
+        return decision
 
     def submit_response(self, task_index: int, task: Dict[str, Any], response: str):
         """
-        Submit response via AIAgent contract
+        Submit response via AIAgent contract.
+        Calls the updated processTask(uint32, bool) function.
 
         Args:
             task_index: Task index
-            task: Task data
-            response: Response string
+            task: Task data (currently unused in this version)
+            response: Response string ("YES" or "NO")
         """
         if not self.account:
             raise ValueError("Cannot submit response without a private key")
 
-        # Sign the response with minimal data
-        message = f"Task{task_index}"  # Very short message - same as in contract
-
-        logger.info(f"Signing message: {message}")
-        signature_hash = self.web3.keccak(text=message)
-
-        signable_message = encode_defunct(hexstr=signature_hash.hex())
-        signature_object = self.web3.eth.account.sign_message(
-            signable_message, private_key=self.private_key
+        # Convert response string to boolean
+        is_yes_decision = response.strip().upper() == "YES"
+        logger.info(
+            f"Submitting decision for task {task_index}: {is_yes_decision} ({response})"
         )
 
-        # Extract signature bytes
-        signature_bytes = signature_object.signature
-
-        # Submit to blockchain via the AIAgent contract
+        # Submit to blockchain via the AIAgent contract's updated function
         try:
-            # Pass only task_index and signature to the optimized function
-            tx_hash = self.agent.process_task(task_index, signature_bytes)
+            # Call processTask(uint32 taskIndex, bool decision)
+            tx_hash = self.agent.process_task(task_index, is_yes_decision)
 
             # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
             if receipt["status"] == 1:
-                logger.info(f"Response submitted successfully via AIAgent: {tx_hash}")
+                logger.info(
+                    f"Response submitted successfully via AIAgent: {tx_hash}"
+                )
             else:
                 logger.error(f"Response submission via AIAgent failed: {receipt}")
         except Exception as e:

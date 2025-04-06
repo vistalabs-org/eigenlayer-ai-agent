@@ -44,8 +44,8 @@ class OpenRouterBackend:
         self.request_headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://eigenlayer-ai-agent.com",  # Your site URL
-            "X-Title": "EigenLayer AI Agent",  # Your app name
+            "HTTP-Referer": "https://market.vista-labs.ai",
+            "X-Title": "Vista Market AI Agent",
         }
 
     def generate_response(self, query: str) -> str:

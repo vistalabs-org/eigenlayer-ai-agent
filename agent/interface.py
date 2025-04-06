@@ -5,7 +5,7 @@ from typing import Optional
 from loguru import logger
 from web3 import Web3
 
-from agent.utils.web3 import load_abi
+from .utils import load_abi
 
 
 class AgentInterface:
@@ -33,44 +33,57 @@ class AgentInterface:
         # Set up account if private key is provided
         self.account = None
         if private_key:
-            self.account = self.web3.eth.account.from_key(private_key)
+            private_key_hex = self.private_key
+            if private_key_hex.startswith("0x"):
+                private_key_hex = private_key_hex[2:]
+            self.account = self.web3.eth.account.from_key(private_key_hex)
+            logger.info(f"Using account: {self.account.address}")
+        else:
+            logger.warning(
+                "No private key provided. Only read ops available."
+            )
 
     def get_status(self):
-        """Get the agent's status"""
-        status_value = self.contract.functions.status().call()
-        return status_value
+        """Get the status of the agent from the contract"""
+        return self.contract.functions.status().call()
 
-    def process_task(self, task_index, signature):
+    def process_task(self, task_index: int, decision: bool):
         """
         Process a task and submit the agent's response
 
         Args:
             task_index: The task index
-            signature: The signature representing the response
+            decision: The boolean decision (True for YES, False for NO)
 
         Returns:
-            Transaction hash
+            Transaction hash string
         """
         if not self.account:
-            raise ValueError("Private key not provided, cannot send transactions")
+            raise ValueError(
+                "Private key not provided, cannot send transactions"
+            )
 
-        logger.info(f"Processing task {task_index} with signature {signature}")
+        logger.info(f"Processing task {task_index} with decision {decision}")
         gas_price = self.web3.to_wei(1, "gwei")
 
-        tx = self.contract.functions.processTask(
-            task_index, signature
+        tx_build = self.contract.functions.processTask(
+            task_index, decision
         ).build_transaction(
             {
                 "from": self.account.address,
-                "nonce": self.web3.eth.get_transaction_count(self.account.address),
-                "gas": 3000000,
+                "nonce": self.web3.eth.get_transaction_count(
+                    self.account.address
+                 ),
+                "gas": 5000000,  # Increased gas limit
                 "gasPrice": gas_price,
             }
         )
 
-        logger.info(f"Transaction: {tx}")
+        logger.info(f"Transaction details: {tx_build}")
 
-        signed_tx = self.web3.eth.account.sign_transaction(tx, self.private_key)
+        signed_tx = self.web3.eth.account.sign_transaction(
+            tx_build, self.private_key
+        )
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
         return tx_hash.hex()
