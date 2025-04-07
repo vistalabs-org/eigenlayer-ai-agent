@@ -33,6 +33,8 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           # Check if Poetry is installed correctly
           poetry --version
+          # Install the export plugin
+          poetry self add poetry-plugin-export
           # Copy pyproject.toml and poetry.lock first (if it exists)
           if [ -f poetry.lock ]; then
             cp poetry.lock cloudflare/
