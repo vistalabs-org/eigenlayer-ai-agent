@@ -29,18 +29,18 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          cd eigenlayer-ai-agent
+          # Export requirements
           poetry export -f requirements.txt --output cloudflare/requirements.txt --without-hashes
+          # Install wrangler in the cloudflare directory
           cd cloudflare
           npm install wrangler
 
       - name: Package Python Code for Cloudflare
         run: |
           # Copy config.json to cloudflare directory
-          cp eigenlayer-ai-agent/config.json eigenlayer-ai-agent/cloudflare/config.json
+          cp config.json cloudflare/config.json
           
           # Create a ZIP archive of the Python code
-          cd eigenlayer-ai-agent
           zip -r cloudflare/agent.zip agent abis
           
       - name: Deploy Worker
@@ -48,7 +48,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          cd eigenlayer-ai-agent/cloudflare
+          cd cloudflare
           # Set environment variables needed for the agent
           echo "Setting required environment variables..."
           npx wrangler secret put API_KEY --env production
