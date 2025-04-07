@@ -46,7 +46,7 @@ jobs:
       - name: Install Wrangler
         run: |
           cd cloudflare
-          npm install wrangler
+          npm install wrangler@latest
 
       - name: Package Python Code for Cloudflare
         run: |
@@ -67,5 +67,5 @@ jobs:
           npx wrangler secret put API_KEY --env production
           npx wrangler secret put AGENT_PRIVATE_KEY --env production
           
-          # Deploy the worker
-          npx wrangler deploy 
+          # Deploy the worker with production environment
+          npx wrangler deploy --env production 

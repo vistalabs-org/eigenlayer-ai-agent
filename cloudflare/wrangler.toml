@@ -10,10 +10,6 @@ command = "npm run build"
 [observability.logs]
 enabled = true
 
-# Increase resource limits for Pyodide
-[limits]
-cpu_ms = 100
-
 # Set the maximum memory
 [placement]
 mode = "smart"
@@ -25,3 +21,10 @@ crons = ["*/2 * * * *"]
 
 [vars]
 # Environment variables will be set during deployment
+
+# Production environment configuration
+[env.production]
+# Production-specific settings
+name = "eigenlayer-ai-agent-production"
+# Run the agent every 5 minutes in production for stability
+triggers = { crons = ["*/5 * * * *"] }
