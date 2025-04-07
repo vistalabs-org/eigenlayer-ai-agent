@@ -27,11 +27,22 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Install Dependencies
+      - name: Export Dependencies
         run: |
+          # Make sure Poetry is in PATH
+          export PATH="$HOME/.local/bin:$PATH"
+          # Check if Poetry is installed correctly
+          poetry --version
+          # Copy pyproject.toml and poetry.lock first (if it exists)
+          if [ -f poetry.lock ]; then
+            cp poetry.lock cloudflare/
+          fi
+          cp pyproject.toml cloudflare/
           # Export requirements
           poetry export -f requirements.txt --output cloudflare/requirements.txt --without-hashes
-          # Install wrangler in the cloudflare directory
+
+      - name: Install Wrangler
+        run: |
           cd cloudflare
           npm install wrangler
 
