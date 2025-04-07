@@ -62,22 +62,55 @@ jobs:
           path: ./dist
       
       - name: Install Cloudflare Wrangler
-        run: npm install -g wrangler
+        run: npm install -g wrangler@latest
       
-      - name: Deploy container to Cloudflare Workers
+      - name: Set up environment variables
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           API_KEY: ${{ secrets.API_KEY }}
           AGENT_PRIVATE_KEY: ${{ secrets.AGENT_PRIVATE_KEY }}
         run: |
-          # Load the image
+          # Create .env file for Wrangler
+          echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" > .env
+          echo "CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN" >> .env
+          
+          # Check wrangler.toml
+          cat wrangler.toml
+          
+          # Verify the worker.js file exists
+          ls -la worker.js
+      
+      - name: Push Docker image to Cloudflare registry
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # Load the Docker image from the artifact
+          echo "Loading Docker image..."
           gunzip -c ./dist/agent-image.tar.gz | docker load
           
-          # Deploy to Cloudflare using the correct command for containers
-          wrangler deploy \
-            --name eigenlayer-ai-agent \
-            --container \
-            --image eigenlayer-ai-agent:${{ github.sha }} \
-            --var API_KEY:"${API_KEY}" \
-            --var AGENT_PRIVATE_KEY:"${AGENT_PRIVATE_KEY}" 
+          # Login to Cloudflare registry
+          echo "$CLOUDFLARE_API_TOKEN" | docker login registry.cloudflare.com -u "token" --password-stdin
+          
+          # Tag image for Cloudflare registry
+          docker tag eigenlayer-ai-agent:${{ github.sha }} registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/eigenlayer-ai-agent:latest
+          
+          # Push to Cloudflare registry
+          docker push registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/eigenlayer-ai-agent:latest
+      
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          API_KEY: ${{ secrets.API_KEY }}
+          AGENT_PRIVATE_KEY: ${{ secrets.AGENT_PRIVATE_KEY }}
+        run: |
+          # Set secrets for the worker
+          echo "Setting worker secrets..."
+          wrangler secret put API_KEY --name eigenlayer-ai-agent <<< "$API_KEY"
+          wrangler secret put AGENT_PRIVATE_KEY --name eigenlayer-ai-agent <<< "$AGENT_PRIVATE_KEY"
+          
+          # Deploy the worker using wrangler
+          echo "Deploying Worker..."
+          wrangler deploy worker.js 
