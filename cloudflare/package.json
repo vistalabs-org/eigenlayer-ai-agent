@@ -1,15 +1,18 @@
 {
   "name": "eigenlayer-ai-agent-worker",
   "version": "1.0.0",
-  "description": "Cloudflare Worker with Pyodide to run Python agent code",
+  "description": "Cloudflare Worker for EigenLayer AI Agent",
   "main": "worker.js",
+  "type": "module",
   "scripts": {
     "build": "echo 'No build step required'",
+    "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "start-local": "wrangler dev --local --test-scheduled",
+    "trigger-scheduled": "wrangler dev --local --test-scheduled",
+    "debug": "wrangler dev --local --test-scheduled --inspector-port=9229"
   },
   "dependencies": {
-    "wrangler": "^3.0.0"
-  },
-  "type": "module"
+    "wrangler": "^4.0.0"
+  }
 } 

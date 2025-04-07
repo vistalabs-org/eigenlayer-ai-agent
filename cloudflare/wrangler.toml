@@ -24,7 +24,5 @@ crons = ["*/2 * * * *"]
 
 # Production environment configuration
 [env.production]
-# Production-specific settings
-name = "eigenlayer-ai-agent-production"
-# Run the agent every 5 minutes in production for stability
-triggers = { crons = ["*/5 * * * *"] }
+# Run the agent every 2 minutes in production
+triggers = { crons = ["*/2 * * * *"] }
