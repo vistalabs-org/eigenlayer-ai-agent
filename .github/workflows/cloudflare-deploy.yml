@@ -62,20 +62,6 @@ jobs:
           name: agent-image
           path: ./dist
       
-      - name: Create worker.js
-        run: |
-          # Create a minimal JavaScript file required by Wrangler
-          cat > worker.js << EOF
-          // This is a minimal JavaScript file required by Wrangler
-          // The actual functionality is in the Docker container
-          
-          export default {
-            async fetch(request, env, ctx) {
-              return new Response("Agent is running. Please use API endpoints for interaction.");
-            }
-          };
-          EOF
-      
       - name: Load Docker image
         run: |
           # Load the Docker image from the artifact
