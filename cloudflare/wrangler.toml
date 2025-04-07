@@ -1,0 +1,27 @@
+name = "eigenlayer-ai-agent"
+main = "worker.js"
+compatibility_date = "2024-04-07"
+
+# Build configuration for Pyodide
+[build]
+command = "npm run build"
+
+# Enable worker logs
+[observability.logs]
+enabled = true
+
+# Increase resource limits for Pyodide
+[limits]
+cpu_ms = 100
+
+# Set the maximum memory
+[placement]
+mode = "smart"
+
+# Run the agent every 2 minutes
+# Using a cron schedule - can be adjusted as needed
+[triggers]
+crons = ["*/2 * * * *"]
+
+[vars]
+# Environment variables will be set during deployment

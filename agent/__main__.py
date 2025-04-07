@@ -707,5 +707,140 @@ def main():
         sys.exit(1)
 
 
+def handle_worker_request(request_data):
+    """
+    Handler function for processing requests from the Cloudflare Worker.
+    This function acts as the bridge between the Worker and the Python agent.
+    It simulates what would happen if you ran 'python agent --config config.yml'.
+    
+    Args:
+        request_data: Dictionary containing request information:
+            url: Full URL of the request
+            method: HTTP method (GET, POST, etc.)
+            path: URL path
+            headers: Request headers
+            body: Request body (parsed if JSON)
+            env: Environment variables from Cloudflare
+    
+    Returns:
+        Dictionary with:
+            status: HTTP status code
+            headers: Response headers
+            body: Response body
+    """
+    try:
+        from loguru import logger
+        
+        # Log request info
+        method = request_data['method']
+        path = request_data['path']
+        logger.info(f"Received request: {method} {path}")
+        
+        # Load configuration (similar to --config flag)
+        from agent.utils.config import load_config
+        config = load_config('/config.json')  # Path will be set by the worker.js
+        
+        # Basic routing
+        if path == "/" or path == "/status":
+            # Return simple status response
+            return {
+                "status": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": {
+                    "status": "running",
+                    "version": "0.1.0",
+                    "message": "EigenLayer AI Agent is running",
+                    "config": {
+                        # Only show non-sensitive config info
+                        "rpc_url": config.get("rpc_url"),
+                        "oracle_address": config.get("oracle_address"),
+                        "registry_address": config.get("registry_address"),
+                        "has_agent_address": bool(config.get("agent_address")),
+                    }
+                }
+            }
+        elif path == "/run-once" and method == "POST":
+            # Simulate running the agent once
+            try:
+                # In a real environment, we would create and run the bridge
+                # PredictionMarketBridge(config_path='/config.json').run(run_once=True)
+                
+                # Just simulate the response for now
+                return {
+                    "status": 200,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {
+                        "result": "Agent run-once simulated",
+                        "message": "In a real environment, this would process pending tasks",
+                        "config_loaded": bool(config)
+                    }
+                }
+            except Exception as e:
+                logger.error(f"Error simulating agent run: {e}")
+                return {
+                    "status": 500,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {
+                        "error": f"Error simulating agent run: {str(e)}"
+                    }
+                }
+                
+        elif path == "/task" and method == "POST":
+            # Process a task request
+            if not request_data.get('body'):
+                return {
+                    "status": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {"error": "Request body is required"}
+                }
+            
+            # Extract task data
+            body = request_data['body']
+            task_data = body.get('task')
+            
+            if not task_data:
+                return {
+                    "status": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {"error": "Task data is required"}
+                }
+            
+            # Process the task using the agent's logic
+            # This is a simplified version - in a real implementation, 
+            # you would use the actual agent logic
+            return {
+                "status": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": {
+                    "result": "Task processed successfully",
+                    "decision": "YES",
+                    "confidence": 0.85,
+                    "task": task_data,
+                    "note": "This is a simulated response."
+                }
+            }
+        else:
+            # Unknown endpoint
+            return {
+                "status": 404,
+                "headers": {"Content-Type": "application/json"},
+                "body": {"error": f"Unknown endpoint: {path}"}
+            }
+            
+    except Exception as e:
+        # Log the error and return a 500 response
+        import traceback
+        error_details = traceback.format_exc()
+        
+        return {
+            "status": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": {
+                "error": str(e),
+                "details": error_details
+            }
+        }
+
+
 if __name__ == "__main__":
     main()

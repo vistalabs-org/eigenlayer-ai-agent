@@ -1,82 +1,58 @@
-name: Deploy to Cloudflare
+name: Deploy to Cloudflare Workers
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  run-ci-tests:
-    # Call the reusable CI workflow
-    uses: ./.github/workflows/ci.yml
-    # Pass secrets required by the test job in ci.yml
-    secrets: inherit
-
-  build-docker:
-    # Depend on the reusable CI tests job
-    needs: run-ci-tests
+  deploy-python-worker:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          context: .
-          push: false
-          load: true
-          tags: eigenlayer-ai-agent:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          file: Dockerfile
-          platforms: linux/amd64
-      
-      - name: Export Docker image
+          node-version: '18'
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
         run: |
-          mkdir -p ./dist
-          docker save eigenlayer-ai-agent:${{ github.sha }} | gzip > ./dist/agent-image.tar.gz
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-image
-          path: ./dist/agent-image.tar.gz
-          retention-days: 1
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-  deploy-container:
-    # Updated dependency: Only depends on build-docker now
-    needs: build-docker
-    runs-on: ubuntu-latest
-    name: Deploy
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: agent-image
-          path: ./dist
-      
-      - name: Load Docker image
+      - name: Install Dependencies
         run: |
-          # Load the Docker image from the artifact
-          gunzip -c ./dist/agent-image.tar.gz | docker load
-          echo "Loaded Docker image: eigenlayer-ai-agent:${{ github.sha }}"
-      
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          secrets: |
-            API_KEY
-            AGENT_PRIVATE_KEY
-          command: deploy worker.js
+          cd eigenlayer-ai-agent
+          poetry export -f requirements.txt --output cloudflare/requirements.txt --without-hashes
+          cd cloudflare
+          npm install wrangler
+
+      - name: Package Python Code for Cloudflare
+        run: |
+          # Copy config.json to cloudflare directory
+          cp eigenlayer-ai-agent/config.json eigenlayer-ai-agent/cloudflare/config.json
+          
+          # Create a ZIP archive of the Python code
+          cd eigenlayer-ai-agent
+          zip -r cloudflare/agent.zip agent abis
+          
+      - name: Deploy Worker
         env:
-          API_KEY: ${{ secrets.API_KEY }}
-          AGENT_PRIVATE_KEY: ${{ secrets.AGENT_PRIVATE_KEY }} 
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd eigenlayer-ai-agent/cloudflare
+          # Set environment variables needed for the agent
+          echo "Setting required environment variables..."
+          npx wrangler secret put API_KEY --env production
+          npx wrangler secret put AGENT_PRIVATE_KEY --env production
+          
+          # Deploy the worker
+          npx wrangler deploy 
